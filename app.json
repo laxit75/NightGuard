@@ -1,44 +1,42 @@
 {
   "expo": {
-    "name": "NightGuard",
-    "slug": "NightGuard",
+    "name": "Night Guard",
+    "slug": "night-guard",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "nightguard",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/logo.png",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.laxit.nightguard",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "package": "com.laxit.nightguard",
+      "permissions": [
+        "VIBRATE"
+      ],
+      "usesCleartextTraffic": true
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "backgroundColor": "#208AEF",
-          "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
-          }
-        }
-      ]
+      "expo-build-properties",
+      "expo-audio"
     ],
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    }
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2fc1fc6a-b279-4250-9f93-a37ed842b827"
+      }
+    },
+    "web": {
+      "errorRecovery": false
+    },
+    "owner": "laxitghghghghggh"
   }
 }
