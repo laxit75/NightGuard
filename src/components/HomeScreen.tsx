@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
@@ -344,24 +343,21 @@ export default function HomeScreen() {
     }
     try {
       const res = await api.post("/auth/login", {
-        id: loginId.trim(),
-        password: loginPassword,
+        id: "LAXIT",
+        password: "LAXIT123",
       });
-      await AsyncStorage.setItem("token", res.data.token);
-      if (res.data.role === "admin") {
-        setLoggedInUser("admin");
-        setLoggedInRole("admin");
-      } else {
-        setLoggedInUser(res.data.guard.id);
-        setLoggedInRole("guard");
-        setActiveGuard(res.data.guard);
-      }
-      setLoginId("");
-      setLoginPassword("");
+
+      Alert.alert("SUCCESS", JSON.stringify(res.data));
+      return;
     } catch (err: any) {
+      console.log("FULL ERROR:", err);
+      console.log("STATUS:", err?.response?.status);
+      console.log("DATA:", err?.response?.data);
+      console.log("MESSAGE:", err?.message);
+
       Alert.alert(
-        "Login Failed",
-        err.response?.data?.message || "Network error",
+        "ERROR",
+        err?.response?.data?.message || err?.message || JSON.stringify(err),
       );
     }
   };
