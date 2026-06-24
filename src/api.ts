@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-const API_BASE = "http://localhost:5000/api"; // to be changed after deploy
+const API_BASE = "http://13.206.89.30:5000/api";
 
 const api = axios.create({ baseURL: API_BASE });
 

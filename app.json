@@ -4,38 +4,20 @@
     "slug": "night-guard",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
-    "userInterfaceStyle": "light",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.laxit.nightguard",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+      "bundleIdentifier": "com.laxit.nightguard"
     },
     "android": {
       "package": "com.laxit.nightguard",
-      "permissions": [
-        "VIBRATE"
-      ],
-      "usesCleartextTraffic": true
+      "permissions": ["VIBRATE"]
     },
-    "plugins": [
-      "expo-router",
-      "expo-build-properties",
-      "expo-audio"
-    ],
+    "plugins": ["expo-router", "expo-build-properties"],
     "extra": {
-      "router": {},
       "eas": {
         "projectId": "2fc1fc6a-b279-4250-9f93-a37ed842b827"
       }
-    },
-    "web": {
-      "errorRecovery": false
     },
     "owner": "laxitghghghghggh"
   }
