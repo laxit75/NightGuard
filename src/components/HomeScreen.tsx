@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
+import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,23 +43,18 @@ import { useTheme } from "./ThemeContext";
 export default function HomeScreen() {
   const { colors } = useTheme();
 
-  // ── Audio player ──
-  let alarmPlayer: any;
-  try {
-    alarmPlayer = useAudioPlayer(require("../../assets/alarm.wav"));
-  } catch (e) {
-    console.warn("Audio player init failed", e);
-  }
-  const safePlay = () => {
+  const safePlay = async () => {
     try {
-      alarmPlayer?.play();
-    } catch (_) {}
+      const { sound } = await Audio.Sound.createAsync(
+        require("../../assets/alarm.wav"),
+      );
+      await sound.playAsync();
+    } catch (e) {
+      console.warn("Audio play failed", e);
+    }
   };
-  const safePause = () => {
-    try {
-      alarmPlayer?.pause();
-    } catch (_) {}
-  };
+
+  const safePause = () => {};
 
   const [language, setLanguage] = useState<"en" | "hi">("hi");
   const t = (key: string): string => translations[language][key] ?? key;
@@ -1017,7 +1013,7 @@ export default function HomeScreen() {
         />
         <View style={{ alignItems: "center", marginBottom: 40 }}>
           <Image
-            source={require("../../assets/logo.png")}
+            source={require("../../assets/icon.png")}
             style={{ width: 120, height: 120, marginBottom: 10 }}
             resizeMode="contain"
           />
