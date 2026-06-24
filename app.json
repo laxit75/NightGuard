@@ -11,7 +11,7 @@
     },
     "android": {
       "package": "com.laxit.nightguard",
-      "permissions": ["VIBRATE"]
+      "permissions": ["INTERNET", "VIBRATE"]
     },
     "plugins": ["expo-router", "expo-build-properties"],
     "extra": {
