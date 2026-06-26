@@ -42,6 +42,11 @@ import { useTheme } from "./ThemeContext";
 
 export default function HomeScreen() {
   const { colors } = useTheme();
+  const appFontFamily = Platform.select({
+    ios: "Inter_400Regular",
+    android: "Inter_400Regular",
+    default: "Inter_400Regular",
+  });
 
   const safePlay = async () => {
     try {
@@ -66,6 +71,7 @@ export default function HomeScreen() {
   );
   const [loginId, setLoginId] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // ── Data (start empty) ──
   const [guards, setGuards] = useState<Guard[]>([]);
@@ -98,6 +104,7 @@ export default function HomeScreen() {
   // ── Admin UI ──
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const sidebarAnim = useRef(new Animated.Value(-240)).current;
+  const [sidebarDateTime, setSidebarDateTime] = useState(new Date());
   const [adminPage, setAdminPage] = useState<
     | "dashboard"
     | "users"
@@ -159,6 +166,16 @@ export default function HomeScreen() {
   } | null>(null);
   const [editZoneName, setEditZoneName] = useState("");
   const [zoneFilter, setZoneFilter] = useState("all");
+  const [reportSiteFilter, setReportSiteFilter] = useState("all");
+  const [reportZoneFilter, setReportZoneFilter] = useState("all");
+  const [reportStatusFilter, setReportStatusFilter] = useState<
+    "all" | "Responded" | "Missed" | "Escalated"
+  >("all");
+  const [reportTimeframe, setReportTimeframe] = useState<"24h" | "7d" | "30d">
+    ("7d");
+  const [selectedReportAlert, setSelectedReportAlert] = useState<
+    AlertHistory | null
+  >(null);
 
   // ── Refs for timers ──
   const activeGuardRef = useRef<Guard | null>(null);
@@ -390,6 +407,11 @@ export default function HomeScreen() {
   }, [photoSeconds, showResolution]);
 
   useEffect(() => {
+    const timer = setInterval(() => setSidebarDateTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     return () => {
       safePause();
     };
@@ -398,11 +420,12 @@ export default function HomeScreen() {
   // ── Auth ──
   const handleLogin = async () => {
     if (!loginId.trim() || !loginPassword.trim()) {
-      Alert.alert("Error", "Please enter ID and password.");
+      setLoginError("Please enter ID and password.");
       return;
     }
 
     try {
+      setLoginError(null);
       const res = await api.post("/auth/login", {
         id: loginId.trim(),
         password: loginPassword.trim(),
@@ -453,10 +476,9 @@ export default function HomeScreen() {
         err?.code === "ECONNABORTED" ||
         err?.message?.toLowerCase().includes("network");
 
-      Alert.alert(
-        isNetworkError ? "No Internet" : "Login Failed",
+      setLoginError(
         isNetworkError
-          ? "Please connect to Internet"
+          ? "Please connect to the internet and try again."
           : err?.response?.data?.message || "Unable to login",
       );
     }
@@ -465,6 +487,7 @@ export default function HomeScreen() {
   const handleLogout = async () => {
     setLoggedInUser(null);
     setLoggedInRole(null);
+    setLoginError(null);
     setActiveGuard(null);
     setShowAlert(false);
     setTimerSeconds(30);
@@ -1090,6 +1113,170 @@ export default function HomeScreen() {
     [allZones, zoneFilter],
   );
 
+  const availableReportZones = useMemo(
+    () =>
+      reportSiteFilter === "all"
+        ? allZones
+        : allZones.filter((z) => z.siteId === reportSiteFilter),
+    [allZones, reportSiteFilter],
+  );
+
+  const getTimeframeStart = (frame: "24h" | "7d" | "30d") => {
+    const now = Date.now();
+    if (frame === "24h") return now - 24 * 60 * 60 * 1000;
+    if (frame === "7d") return now - 7 * 24 * 60 * 60 * 1000;
+    return now - 30 * 24 * 60 * 60 * 1000;
+  };
+
+  const reportFilteredAlerts = useMemo(() => {
+    const start = getTimeframeStart(reportTimeframe);
+    return alertHistory.filter((item) => {
+      const statusMatch =
+        reportStatusFilter === "all" || item.status === reportStatusFilter;
+      const siteMatch =
+        reportSiteFilter === "all" || item.site === reportSiteFilter;
+      const zoneMatch =
+        reportZoneFilter === "all" || item.zone === reportZoneFilter;
+      const timeMatch = item.timestamp >= start;
+      return statusMatch && siteMatch && zoneMatch && timeMatch;
+    });
+  }, [alertHistory, reportSiteFilter, reportZoneFilter, reportStatusFilter, reportTimeframe]);
+
+  const reportMetrics = useMemo(() => {
+    const total = reportFilteredAlerts.length;
+    const responded = reportFilteredAlerts.filter(
+      (item) => item.status === "Responded",
+    ).length;
+    const missed = reportFilteredAlerts.filter((item) => item.status === "Missed").length;
+    const escalated = reportFilteredAlerts.filter(
+      (item) => item.status === "Escalated",
+    ).length;
+    const avgResponse =
+      reportFilteredAlerts.reduce((sum, item) => sum + (item.responseTime ?? 0), 0) /
+      Math.max(reportFilteredAlerts.length, 1);
+    const criticalEvents = missed + escalated;
+    const riskScore = total === 0 ? 0 : Math.round((criticalEvents / total) * 100);
+    const uptime = 99.5 + (responded / Math.max(total, 1)) * 0.5;
+
+    const countBy = (
+      items: AlertHistory[],
+      field: keyof AlertHistory,
+    ): Record<string, number> =>
+      items.reduce((acc, item) => {
+        const value = String(item[field] ?? "Unassigned");
+        acc[value] = (acc[value] ?? 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+    const statusCounts = countBy(reportFilteredAlerts, "status");
+    const siteCounts = countBy(reportFilteredAlerts, "site");
+    const zoneCounts = countBy(reportFilteredAlerts, "zone");
+
+    return {
+      total,
+      responded,
+      missed,
+      escalated,
+      avgResponse,
+      criticalEvents,
+      riskScore,
+      uptime: Math.min(100, Number(uptime.toFixed(1))),
+      statusCounts,
+      siteCounts,
+      zoneCounts,
+    };
+  }, [reportFilteredAlerts]);
+
+  const topSites = useMemo(
+    () =>
+      Object.entries(reportMetrics.siteCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3),
+    [reportMetrics.siteCounts],
+  );
+
+  const topZones = useMemo(
+    () =>
+      Object.entries(reportMetrics.zoneCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3),
+    [reportMetrics.zoneCounts],
+  );
+
+  const latestAlerts = useMemo(
+    () =>
+      [...reportFilteredAlerts]
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 8),
+    [reportFilteredAlerts],
+  );
+
+  const handleExportReport = () => {
+    if (Platform.OS === "web") {
+      const csvRows = [
+        ["Date", "Time", "Guard", "Status", "Site", "Zone", "Response Time"],
+        ...reportFilteredAlerts.map((item) => [
+          item.date,
+          item.time,
+          item.guardName,
+          item.status,
+          item.site ?? "-",
+          item.zone ?? "-",
+          item.responseTime ? `${item.responseTime}s` : "-",
+        ]),
+      ];
+      const csvContent = csvRows.map((row) => row.join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "alert_report.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    Alert.alert(
+      "Export",
+      "CSV export is available on web. Use the backend export endpoint for native apps.",
+    );
+  };
+
+  const renderReportDetailModal = () => (
+    <Modal visible={!!selectedReportAlert} transparent animationType="slide">
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.card }]}> 
+          <Text style={[styles.modalTitle, { color: colors.text }]}> {t("viewDetails")} </Text>
+          <Text style={{ color: colors.subText, marginBottom: 18 }}>Detailed alert record for incident review</Text>
+          {selectedReportAlert ? (
+            <View style={{ gap: 12 }}>
+              {[
+                ["Guard", selectedReportAlert.guardName],
+                ["Site", selectedReportAlert.site ?? "—"],
+                ["Zone", selectedReportAlert.zone ?? "—"],
+                ["Status", selectedReportAlert.status],
+                ["Alert Type", selectedReportAlert.alertType],
+                ["Date / Time", `${selectedReportAlert.date} ${selectedReportAlert.time}`],
+                ["Response Time", selectedReportAlert.responseTime ? `${selectedReportAlert.responseTime}s` : "—"],
+                ["Remarks", selectedReportAlert.remarks ?? "—"],
+              ].map(([label, value]) => (
+                <View key={String(label)} style={{ marginBottom: 8 }}>
+                  <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 4 }}>{label}</Text>
+                  <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}>{value}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.modalBtn, { backgroundColor: colors.primary, marginTop: 20 }]}
+            onPress={() => setSelectedReportAlert(null)}
+          >
+            <Text style={[styles.buttonText, { color: "#fff" }]}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // ── Resolution Modal ──
   const renderResolutionModal = () => (
     <Modal visible={showResolution} transparent animationType="slide">
@@ -1185,23 +1372,80 @@ export default function HomeScreen() {
         <Text
           style={{
             color: colors.sidebarText,
-            fontSize: 18,
-            fontWeight: "bold",
+            fontSize: 19,
+            fontWeight: "700",
+            fontFamily: appFontFamily,
+            letterSpacing: 0.2,
+            lineHeight: 24,
           }}
           numberOfLines={1}
         >
           🌙 Night Guard
         </Text>
         <Text
+          style={[styles.sidebarSectionLabel, { color: colors.sidebarText }]}
+        >
+          Operations
+        </Text>
+        <Text
           style={{
             color: colors.sidebarText,
-            fontSize: 11,
-            marginTop: 2,
-            opacity: 0.6,
+            fontSize: 12,
+            marginTop: 3,
+            opacity: 0.65,
+            fontFamily: appFontFamily,
+            fontWeight: "500",
+            letterSpacing: 0.2,
           }}
         >
-          Admin Panel
+          Security Operations Console
         </Text>
+        <View
+          style={{
+            marginTop: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 14,
+            backgroundColor: "rgba(59,130,246,0.18)",
+            borderWidth: 1,
+            borderColor: "rgba(147,197,253,0.25)",
+          }}
+        >
+          <Text
+            style={{
+              color: colors.sidebarText,
+              fontSize: 20,
+              fontWeight: "700",
+              letterSpacing: 1.2,
+              fontFamily: appFontFamily,
+              lineHeight: 24,
+            }}
+          >
+            {sidebarDateTime.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: false,
+            })}
+          </Text>
+          <Text
+            style={{
+              color: colors.sidebarText,
+              fontSize: 12,
+              marginTop: 4,
+              opacity: 0.75,
+              fontFamily: appFontFamily,
+              fontWeight: "500",
+              letterSpacing: 0.2,
+            }}
+          >
+            {sidebarDateTime.toLocaleDateString([], {
+              weekday: "short",
+              day: "2-digit",
+              month: "short",
+            })}
+          </Text>
+        </View>
       </View>
       {(
         [
@@ -1214,40 +1458,61 @@ export default function HomeScreen() {
           "reports",
           "settings",
         ] as const
-      ).map((item) => (
-        <TouchableOpacity
-          key={item}
-          style={[
-            styles.sidebarItem,
-            adminPage === item && { backgroundColor: colors.sidebarActive },
-          ]}
-          onPress={() => {
-            setAdminPage(item);
-            toggleSidebar();
-          }}
-        >
-          <Text style={[styles.sidebarItemText, { color: colors.sidebarText }]}>
-            {
-              (
-                {
-                  dashboard: "📊",
-                  users: "👥",
-                  sites: "🏢",
-                  zones: "📍",
-                  groups: "⏱️",
-                  escalation: "🚨",
-                  reports: "📈",
-                  settings: "⚙️",
-                } as any
-              )[item]
-            }{" "}
-            {t(item)}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      ).map((item) => {
+        const isActive = adminPage === item;
+        return (
+          <TouchableOpacity
+            key={item}
+            style={[
+              styles.sidebarItem,
+              {
+                backgroundColor: isActive
+                  ? colors.sidebarActive
+                  : "transparent",
+                borderWidth: isActive ? 1 : 0,
+                borderColor: isActive
+                  ? "rgba(255,255,255,0.12)"
+                  : "transparent",
+              },
+            ]}
+            onPress={() => {
+              setAdminPage(item);
+              toggleSidebar();
+            }}
+          >
+            <Text
+              style={[
+                styles.sidebarItemText,
+                { color: colors.sidebarText, fontFamily: appFontFamily },
+              ]}
+            >
+              {
+                (
+                  {
+                    dashboard: "📊",
+                    users: "👥",
+                    sites: "🏢",
+                    zones: "📍",
+                    groups: "⏱️",
+                    escalation: "📢",
+                    reports: "📈",
+                    settings: "⚙️",
+                  } as any
+                )[item]
+              }{" "}
+              {t(item)}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.sidebarItem} onPress={handleLogout}>
-        <Text style={[styles.sidebarItemText, { color: colors.danger }]}>
+        <Text
+          style={[
+            styles.sidebarItemText,
+            { color: colors.danger, fontFamily: appFontFamily },
+          ]}
+        >
           🚪 {t("logout")}
         </Text>
       </TouchableOpacity>
@@ -1269,17 +1534,85 @@ export default function HomeScreen() {
             style={{ width: 120, height: 120, marginBottom: 10 }}
             resizeMode="contain"
           />
-          <Text style={[styles.subtitle, { color: colors.subText }]}>
+          <Text
+            style={[
+              styles.subtitle,
+              { color: colors.subText, fontFamily: appFontFamily },
+            ]}
+          >
             {t("subtitle")}
           </Text>
         </View>
-        <View style={[styles.loginCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.loginTitle, { color: colors.text }]}>
+        <View
+          style={[
+            styles.loginCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              shadowColor: colors.primary,
+              shadowOpacity: 0.12,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.loginBadge,
+              { backgroundColor: `${colors.primary}18` },
+            ]}
+          >
+            <Text style={{ fontSize: 24 }}>🔐</Text>
+          </View>
+          <Text
+            style={[
+              styles.loginTitle,
+              { color: colors.text, fontFamily: appFontFamily },
+            ]}
+          >
             {t("loginTitle")}
           </Text>
-          <Text style={[styles.loginSubtitle, { color: colors.subText }]}>
+          <Text
+            style={[
+              styles.loginSubtitle,
+              { color: colors.subText, fontFamily: appFontFamily },
+            ]}
+          >
             {t("loginSubtitle")}
           </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 14,
+            }}
+          >
+            <View
+              style={[
+                styles.headerBadge,
+                {
+                  borderColor: `${colors.primary}30`,
+                  backgroundColor: `${colors.primary}12`,
+                },
+              ]}
+            >
+              <Text style={[styles.headerBadgeText, { color: colors.primary }]}>
+                SECURE
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.headerBadge,
+                {
+                  borderColor: `${colors.success}30`,
+                  backgroundColor: `${colors.success}12`,
+                },
+              ]}
+            >
+              <Text style={[styles.headerBadgeText, { color: colors.success }]}>
+                24/7 MONITOR
+              </Text>
+            </View>
+          </View>
           <TextInput
             style={[
               styles.input,
@@ -1303,11 +1636,44 @@ export default function HomeScreen() {
             onChangeText={setLoginPassword}
           />
           <TouchableOpacity
-            style={[styles.mainButton, { backgroundColor: colors.primary }]}
+            style={[
+              styles.mainButton,
+              {
+                backgroundColor: colors.primary,
+                shadowColor: colors.primary,
+                shadowOpacity: 0.24,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 6 },
+              },
+            ]}
             onPress={handleLogin}
           >
-            <Text style={styles.buttonText}>{t("loginBtn")}</Text>
+            <Text style={[styles.buttonText, { fontFamily: appFontFamily }]}>
+              {t("loginBtn")}
+            </Text>
           </TouchableOpacity>
+          {loginError ? (
+            <View
+              style={[
+                styles.errorBox,
+                { backgroundColor: `${colors.danger}20` },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.errorText,
+                  { color: colors.danger, fontFamily: appFontFamily },
+                ]}
+              >
+                {loginError}
+              </Text>
+            </View>
+          ) : null}
+          <View style={[styles.loginHint, { borderTopColor: colors.border }]}>
+            <Text style={[styles.loginHintText, { color: colors.subText }]}>
+              {t("loginHint")}
+            </Text>
+          </View>
         </View>
       </View>
     );
@@ -1491,14 +1857,39 @@ export default function HomeScreen() {
             },
           ]}
         >
-          <TouchableOpacity onPress={toggleSidebar} style={styles.hamburgerBtn}>
-            <Text style={[styles.hamburgerText, { color: colors.text }]}>
-              ☰
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <TouchableOpacity
+              onPress={toggleSidebar}
+              style={styles.hamburgerBtn}
+            >
+              <Text style={[styles.hamburgerText, { color: colors.text }]}>
+                ☰
+              </Text>
+            </TouchableOpacity>
+            <View style={{ marginLeft: 8, flex: 1 }}>
+              <Text style={[styles.adminHeaderTitle, { color: colors.text }]}>
+                {pageTitles[adminPage]}
+              </Text>
+              <Text
+                style={{ color: colors.subText, fontSize: 12, marginTop: 2 }}
+              >
+                Live security operations
+              </Text>
+            </View>
+          </View>
+          <View
+            style={[
+              styles.headerBadge,
+              {
+                borderColor: `${colors.primary}30`,
+                backgroundColor: `${colors.primary}12`,
+              },
+            ]}
+          >
+            <Text style={[styles.headerBadgeText, { color: colors.primary }]}>
+              LIVE
             </Text>
-          </TouchableOpacity>
-          <Text style={[styles.adminHeaderTitle, { color: colors.text }]}>
-            {pageTitles[adminPage]}
-          </Text>
+          </View>
         </View>
         {sidebarVisible && (
           <TouchableOpacity
@@ -2875,7 +3266,12 @@ export default function HomeScreen() {
                       marginBottom: 8,
                     }}
                   >
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: colors.text, fontFamily: appFontFamily },
+                      ]}
+                    >
                       🚨 Active Escalations
                     </Text>
                     <View
@@ -2906,7 +3302,8 @@ export default function HomeScreen() {
                       { color: colors.subText, marginBottom: 12 },
                     ]}
                   >
-                    Guards who have breached a missed-alert threshold
+                    Push notifications triggered when guards breach a
+                    missed-alert threshold
                   </Text>
                   {escalationReport.length === 0 ? (
                     <View style={{ alignItems: "center", paddingVertical: 20 }}>
@@ -3157,7 +3554,7 @@ export default function HomeScreen() {
                   }}
                 >
                   <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                    ⚙️ Escalation Levels
+                    ⚙️ Push System Levels
                   </Text>
                   <TouchableOpacity
                     style={{
@@ -3205,7 +3602,7 @@ export default function HomeScreen() {
                     ]}
                   >
                     <Text style={{ color: colors.subText }}>
-                      No escalation levels configured yet.
+                      No push system levels configured yet.
                     </Text>
                     <Text
                       style={{
@@ -3313,7 +3710,13 @@ export default function HomeScreen() {
                         }}
                         style={{ padding: 4 }}
                       >
-                        <Text style={{ color: colors.danger, fontSize: 18 }}>
+                        <Text
+                          style={{
+                            color: colors.danger,
+                            fontSize: 18,
+                            fontFamily: appFontFamily,
+                          }}
+                        >
                           🗑️
                         </Text>
                       </TouchableOpacity>
@@ -3525,87 +3928,477 @@ export default function HomeScreen() {
 
             {/* ══ REPORTS ══ */}
             {adminPage === "reports" && (
-              <View style={[styles.card, { backgroundColor: colors.card }]}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  {t("reportTitle")}
-                </Text>
-                <View style={styles.kpiGrid}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setAdminPage("reports")}
-                  >
+              <>
+                <View style={[styles.card, { backgroundColor: colors.card }]}> 
+                  <View style={styles.rowSpace}>
+                    <View style={{ flex: 1, paddingRight: 6 }}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}> 
+                        {t("reportTitle")} 
+                      </Text>
+                      <Text style={[styles.subtitle, { color: colors.subText }]}> 
+                        {t("reportFilters")} 
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.createBtn, { backgroundColor: colors.primary }]}
+                      onPress={handleExportReport}
+                    >
+                      <Text style={styles.createBtnText}>{t("exportCSV")}</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.kpiGrid}>
                     <KPICard
                       label={t("totalAlerts")}
-                      value={totalAlerts}
+                      value={reportMetrics.total}
                       color={colors.text}
                       icon="📊"
                       colors={colors}
                     />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setAdminPage("reports")}
-                  >
                     <KPICard
                       label={t("responded")}
-                      value={responded}
+                      value={reportMetrics.responded}
                       color={colors.success}
                       icon="✅"
                       colors={colors}
                     />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setAdminPage("reports")}
-                  >
                     <KPICard
                       label={t("missed")}
-                      value={missed}
+                      value={reportMetrics.missed}
                       color={colors.danger}
                       icon="❌"
                       colors={colors}
                     />
-                  </TouchableOpacity>
-                </View>
-                {alertHistory.slice(0, 15).map((item) => (
+                    <KPICard
+                      label={t("avgResponse")}
+                      value={`${reportMetrics.avgResponse.toFixed(1)}s`}
+                      color={colors.info}
+                      icon="⏱️"
+                      colors={colors}
+                    />
+                  </View>
+
                   <View
-                    key={`${item.id}-${item.timestamp}`}
-                    style={[
-                      styles.alertItem,
-                      {
-                        backgroundColor: colors.bg,
-                        borderLeftColor:
-                          item.status === "Responded"
-                            ? colors.success
-                            : colors.danger,
-                      },
-                    ]}
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: 16,
+                    }}
                   >
-                    <Text
-                      style={[styles.alertGuardName, { color: colors.text }]}
-                    >
-                      {item.guardName}
-                    </Text>
-                    <Text style={[styles.alertTime, { color: colors.subText }]}>
-                      {item.date} at {item.time}
-                    </Text>
-                    <Text
+                    <View
                       style={{
-                        color:
-                          item.status === "Responded"
-                            ? colors.success
-                            : colors.danger,
-                        fontSize: 12,
-                        fontWeight: "600",
+                        flex: 1,
+                        minWidth: 150,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        padding: 18,
+                        backgroundColor: colors.bg,
                       }}
                     >
-                      {item.status}
-                      {item.responseTime ? ` in ${item.responseTime}s` : ""}
-                      {item.remarks ? ` — ${item.remarks}` : ""}
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        }}
+                      >
+                        {t("uptime")}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontSize: 28,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {reportMetrics.uptime}%
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 150,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        padding: 18,
+                        backgroundColor: colors.bg,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        }}
+                      >
+                        {t("criticalEvents")}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontSize: 28,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {reportMetrics.criticalEvents}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 150,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        padding: 18,
+                        backgroundColor: colors.bg,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        }}
+                      >
+                        {t("riskScore")}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontSize: 28,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {reportMetrics.riskScore}%
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 12,
+                        marginBottom: 10,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {t("byStatus")}
+                    </Text>
+                    <View>
+                      {Object.entries(reportMetrics.statusCounts).map(
+                        ([label, value]) => {
+                          const width =
+                            reportMetrics.total === 0
+                              ? "0%"
+                              : `${Math.round((value / reportMetrics.total) * 100)}%`;
+                          const labelColor =
+                            label === "Responded"
+                              ? colors.success
+                              : label === "Missed"
+                              ? colors.danger
+                              : colors.warning;
+                          return (
+                            <View
+                              key={label}
+                              style={{ marginBottom: 8, gap: 6 }}
+                            >
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                }}
+                              >
+                                <Text style={{ color: colors.text }}>{label}</Text>
+                                <Text style={{ color: colors.subText }}>{value}</Text>
+                              </View>
+                              <View
+                                style={{
+                                  height: 8,
+                                  backgroundColor: colors.inputBg,
+                                  borderRadius: 999,
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    width: width as unknown as number,
+                                    height: 8,
+                                    backgroundColor: labelColor,
+                                  }}
+                                />
+                              </View>
+                            </View>
+                          );
+                        },
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 12,
+                        marginBottom: 10,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {t("responseTrend")}
+                    </Text>
+                    <Text style={{ color: colors.text, fontSize: 14 }}>
+                      {reportMetrics.total === 0
+                        ? t("noRecords")
+                        : `Average response time over ${reportTimeframe}`}
                     </Text>
                   </View>
-                ))}
-              </View>
+
+                  <View style={{ marginBottom: 24 }}>
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 12,
+                        marginBottom: 10,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {t("latestActivity")}
+                    </Text>
+                    <View
+                      style={[
+                        styles.tableCard,
+                        {
+                          backgroundColor: colors.bg,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <TableHeader
+                        columns={[
+                          { label: "Guard", flex: 2 },
+                          { label: "Status", flex: 1 },
+                          { label: "Site", flex: 1 },
+                          { label: "Time", flex: 1 },
+                        ]}
+                        colors={colors}
+                      />
+                      {latestAlerts.length === 0 ? (
+                        <View style={styles.emptyRow}>
+                          <Text style={{ color: colors.subText }}>
+                            {t("noRecords")}
+                          </Text>
+                        </View>
+                      ) : (
+                        latestAlerts.map((item) => (
+                          <TouchableOpacity
+                            key={`${item.id}-${item.timestamp}`}
+                            activeOpacity={0.85}
+                            onPress={() => setSelectedReportAlert(item)}
+                            style={[
+                              styles.tableRow,
+                              {
+                                borderTopColor: colors.border,
+                                backgroundColor: colors.card,
+                              },
+                            ]}
+                          >
+                            <View style={{ flex: 2 }}>
+                              <Text
+                                style={[styles.tableRowPrimary, { color: colors.text }]}
+                              >
+                                {item.guardName}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                style={{
+                                  color:
+                                    item.status === "Responded"
+                                      ? colors.success
+                                      : item.status === "Missed"
+                                      ? colors.danger
+                                      : colors.warning,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                {item.status}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> 
+                                {item.site || "—"}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> 
+                                {item.time}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}>
+                    <View style={{
+                      flex: 1,
+                      minWidth: 160,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      padding: 18,
+                      backgroundColor: colors.bg,
+                    }}>
+                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1, }}>
+                        {t("bySite")}
+                      </Text>
+                      {topSites.map(([site, value]) => (
+                        <View key={site} style={{ marginBottom: 10 }}>
+                          <Text style={{ color: colors.text, fontWeight: "600" }}>{site}</Text>
+                          <Text style={{ color: colors.subText, fontSize: 12 }}>{value} alerts</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <View style={{
+                      flex: 1,
+                      minWidth: 160,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      padding: 18,
+                      backgroundColor: colors.bg,
+                    }}>
+                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1, }}>
+                        {t("byZone")}
+                      </Text>
+                      {topZones.map(([zone, value]) => (
+                        <View key={zone} style={{ marginBottom: 10 }}>
+                          <Text style={{ color: colors.text, fontWeight: "600" }}>{zone}</Text>
+                          <Text style={{ color: colors.subText, fontSize: 12 }}>{value} alerts</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={[styles.card, { backgroundColor: colors.card, marginTop: 12 }]}> 
+                  <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}> 
+                    {t("reportFilters")} 
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 14 }}>
+                    {(["24h", "7d", "30d"] as const).map((frame) => (
+                      <TouchableOpacity
+                        key={frame}
+                        onPress={() => setReportTimeframe(frame)}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor:
+                            reportTimeframe === frame ? colors.primary : colors.border,
+                          backgroundColor:
+                            reportTimeframe === frame ? colors.primary : colors.inputBg,
+                          marginRight: 10,
+                          marginBottom: 10,
+                        }}
+                      >
+                        <Text style={{
+                          color: reportTimeframe === frame ? "#fff" : colors.text,
+                          fontWeight: "600",
+                        }}>
+                          {frame}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 12 }}>
+                    <View style={{ flex: 1, minWidth: 160, marginRight: 10, marginBottom: 10 }}>
+                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 6 }}>{t("filterBySite")}</Text>
+                      <View style={[styles.pickerField, { backgroundColor: colors.inputBg, borderColor: colors.border }]}> 
+                        <Picker
+                          selectedValue={reportSiteFilter}
+                          onValueChange={(value) => {
+                            setReportSiteFilter(String(value));
+                            setReportZoneFilter("all");
+                          }}
+                          dropdownIconColor={colors.text}
+                          itemStyle={{ color: colors.text }}
+                          style={{ color: colors.text, width: "100%" }}
+                        >
+                          <Picker.Item label="All Sites" value="all" />
+                          {sites.map((site) => (
+                            <Picker.Item key={site.id} label={site.name} value={site.id} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 160, marginBottom: 10 }}>
+                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 6 }}>{t("byZone")}</Text>
+                      <View style={[styles.pickerField, { backgroundColor: colors.inputBg, borderColor: colors.border }]}> 
+                        <Picker
+                          selectedValue={reportZoneFilter}
+                          onValueChange={(value) => setReportZoneFilter(String(value))}
+                          dropdownIconColor={colors.text}
+                          itemStyle={{ color: colors.text }}
+                          style={{ color: colors.text, width: "100%" }}
+                        >
+                          <Picker.Item label="All Zones" value="all" />
+                          {availableReportZones.map((zone) => (
+                            <Picker.Item key={zone.id} label={zone.name} value={zone.id} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {(["all", "Responded", "Missed", "Escalated"] as const).map((status) => (
+                      <TouchableOpacity
+                        key={status}
+                        onPress={() => setReportStatusFilter(status)}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor:
+                            reportStatusFilter === status ? colors.primary : colors.border,
+                          backgroundColor:
+                            reportStatusFilter === status ? colors.primary : colors.inputBg,
+                          marginRight: 10,
+                          marginBottom: 10,
+                        }}
+                      >
+                        <Text style={{
+                          color: reportStatusFilter === status ? "#fff" : colors.text,
+                          fontWeight: "600",
+                        }}>
+                          {status === "all" ? "All Statuses" : status}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {renderReportDetailModal()}
+              </>
             )}
 
             {/* ══ SETTINGS ══ */}

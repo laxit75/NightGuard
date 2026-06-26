@@ -25,7 +25,7 @@ export type AlertHistory = {
   id: string;
   guardId: string;
   guardName: string;
-  status: "Responded" | "Missed" | "Escalated";
+  status: "Responded" | "Missed" | "Escalated" | "Pending" | "Acknowledged";
   time: string;
   date: string;
   alertType: string;
@@ -33,6 +33,22 @@ export type AlertHistory = {
   timestamp: number;
   remarks?: string;
   photoUri?: string;
+  site?: string;
+  zone?: string;
+  challengeType?: string;
+  supervisor?: string;
+  deviceName?: string;
+  batteryLevel?: string;
+  networkStatus?: string;
+  gpsCoordinates?: string;
+  guardPhotoUri?: string;
+  acknowledgementTime?: string;
+  alertCreatedTime?: string;
+  pushSentTime?: string;
+  deliveredTime?: string;
+  openedTime?: string;
+  closedTime?: string;
+  pushNotificationHistory?: { step: string; timestamp: string }[];
 };
 
 export type Zone = { id: string; name: string; siteId: string };

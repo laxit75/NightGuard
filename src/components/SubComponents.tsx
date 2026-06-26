@@ -1,6 +1,7 @@
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Platform, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./Styles";
+import type { AlertHistory } from "../types";
 
 export const LanguageToggle: React.FC<{
   language: "en" | "hi";
@@ -91,4 +92,79 @@ export const TableHeader: React.FC<{
       </Text>
     ))}
   </View>
+);
+
+export const StatPill: React.FC<{
+  label: string;
+  value: string | number;
+  color?: string;
+  small?: boolean;
+}> = ({ label, value, color = "#3B82F6", small = false }) => (
+  <View
+    style={{
+      paddingHorizontal: small ? 8 : 12,
+      paddingVertical: small ? 6 : 10,
+      borderRadius: 16,
+      backgroundColor: `${color}20`,
+      alignItems: "center",
+      justifyContent: "center",
+    }}
+  >
+    <Text style={{ color, fontWeight: "700", fontSize: small ? 12 : 14 }}>
+      {value}
+    </Text>
+    <Text style={{ color: "#666", fontSize: small ? 10 : 11 }}>{label}</Text>
+  </View>
+);
+
+export const MiniBar: React.FC<{ percent: number; color?: string }> = ({
+  percent,
+  color = "#3B82F6",
+}) => (
+  <View style={{ height: 8, backgroundColor: "#EEE", borderRadius: 999, overflow: "hidden" }}>
+    <View style={{ width: `${Math.max(0, Math.min(100, percent))}%`, height: 8, backgroundColor: color }} />
+  </View>
+);
+
+export const ReportRow: React.FC<{
+  item: AlertHistory;
+  onPress?: (item: AlertHistory) => void;
+  colors: Record<string, string>;
+}> = ({ item, onPress, colors }) => (
+  <TouchableOpacity
+    activeOpacity={0.85}
+    onPress={() => onPress && onPress(item)}
+    style={[
+      styles.tableRow,
+      { borderTopColor: colors.border, backgroundColor: colors.card },
+    ]}
+  >
+    <View style={{ flex: 2 }}>
+      <Text style={[styles.tableRowPrimary, { color: colors.text }]}>
+        {item.guardName}
+      </Text>
+      <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> {item.alertType} </Text>
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text
+        style={{
+          color:
+            item.status === "Responded"
+              ? colors.success
+              : item.status === "Missed"
+              ? colors.danger
+              : colors.warning,
+          fontWeight: "700",
+        }}
+      >
+        {item.status}
+      </Text>
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> {item.site || "—"} </Text>
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> {item.time} </Text>
+    </View>
+  </TouchableOpacity>
 );
