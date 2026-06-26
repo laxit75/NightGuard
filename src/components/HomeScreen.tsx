@@ -1401,35 +1401,30 @@ export default function HomeScreen() {
                   activeOpacity={0.8}
                   onPress={() => setAdminPage("reports")}
                 >
-                  <View style={{ width: 170 }}>
-                    <KPICard
-                      label={t("totalAlerts")}
-                      value={activeGuard.totalAlerts}
-                      color={colors.text}
-                      icon="📊"
-                      colors={colors}
-                    />
-                  </View>
+                  <KPICard
+                    label={t("totalAlerts")}
+                    value={activeGuard.totalAlerts}
+                    color={colors.text}
+                    icon="📊"
+                    colors={colors}
+                  />
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => setAdminPage("reports")}
                 >
-                  <View style={{ width: 170 }}>
-                    <KPICard
-                      label={t("responded")}
-                      value={activeGuard.respondedAlerts}
-                      color={colors.success}
-                      icon="✅"
-                      colors={colors}
-                    />
-                  </View>
+                  <KPICard
+                    label={t("responded")}
+                    value={activeGuard.respondedAlerts}
+                    color={colors.success}
+                    icon="✅"
+                    colors={colors}
+                  />
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => setAdminPage("reports")}
                 >
-                  <View style={{ width: 170 }}></View>
                   <KPICard
                     label={t("missed")}
                     value={
@@ -1440,15 +1435,18 @@ export default function HomeScreen() {
                     colors={colors}
                   />
                 </TouchableOpacity>
-
-                <View style={{ width: 170 }}></View>
-                <KPICard
-                  label={t("compliance")}
-                  value={`${getComplianceRate(activeGuard)}%`}
-                  color={colors.info}
-                  icon="📈"
-                  colors={colors}
-                />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setAdminPage("reports")}
+                >
+                  <KPICard
+                    label={t("compliance")}
+                    value={`${getComplianceRate(activeGuard)}%`}
+                    color={colors.info}
+                    icon="📈"
+                    colors={colors}
+                  />
+                </TouchableOpacity>
               </View>
             </>
           ) : null}
@@ -3531,13 +3529,7 @@ export default function HomeScreen() {
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>
                   {t("reportTitle")}
                 </Text>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-around",
-                    marginBottom: 20,
-                  }}
-                >
+                <View style={styles.kpiGrid}>
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={() => setAdminPage("reports")}
@@ -3720,7 +3712,7 @@ export default function HomeScreen() {
                         <TouchableOpacity
                           key={lang}
                           style={[
-                            styles.roleBtn,
+                            styles.langBtn,
                             {
                               backgroundColor:
                                 language === lang
@@ -3730,7 +3722,14 @@ export default function HomeScreen() {
                           ]}
                           onPress={() => setLanguage(lang)}
                         >
-                          <Text style={styles.buttonText}>
+                          <Text
+                            style={[
+                              styles.langText,
+                              {
+                                color: language === lang ? "#fff" : colors.text,
+                              },
+                            ]}
+                          >
                             {lang.toUpperCase()}
                           </Text>
                         </TouchableOpacity>

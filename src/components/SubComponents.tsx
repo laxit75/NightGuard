@@ -49,7 +49,11 @@ export const KPICard: React.FC<{
       styles.kpiCard,
       {
         backgroundColor: colors.card,
-        width: 150,
+        minWidth: 130,
+        maxWidth: 170,
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: 130,
         minHeight: 180,
         paddingVertical: 28,
         paddingHorizontal: 20,
