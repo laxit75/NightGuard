@@ -37,7 +37,12 @@ import {
   getRandomGame,
 } from "./Games";
 import { styles } from "./Styles";
-import { KPICard, LanguageToggle, TableHeader, ReportRow, StatPill } from "./SubComponents";
+import {
+  KPICard,
+  LanguageToggle,
+  ReportRow,
+  TableHeader
+} from "./SubComponents";
 import { useTheme } from "./ThemeContext";
 
 export default function HomeScreen() {
@@ -171,11 +176,11 @@ export default function HomeScreen() {
   const [reportStatusFilter, setReportStatusFilter] = useState<
     "all" | "Responded" | "Missed" | "Escalated"
   >("all");
-  const [reportTimeframe, setReportTimeframe] = useState<"24h" | "7d" | "30d">
-    ("7d");
-  const [selectedReportAlert, setSelectedReportAlert] = useState<
-    AlertHistory | null
-  >(null);
+  const [reportTimeframe, setReportTimeframe] = useState<"24h" | "7d" | "30d">(
+    "7d",
+  );
+  const [selectedReportAlert, setSelectedReportAlert] =
+    useState<AlertHistory | null>(null);
 
   // ── Refs for timers ──
   const activeGuardRef = useRef<Guard | null>(null);
@@ -1140,33 +1145,47 @@ export default function HomeScreen() {
       const timeMatch = item.timestamp >= start;
       return statusMatch && siteMatch && zoneMatch && timeMatch;
     });
-  }, [alertHistory, reportSiteFilter, reportZoneFilter, reportStatusFilter, reportTimeframe]);
+  }, [
+    alertHistory,
+    reportSiteFilter,
+    reportZoneFilter,
+    reportStatusFilter,
+    reportTimeframe,
+  ]);
 
   const reportMetrics = useMemo(() => {
     const total = reportFilteredAlerts.length;
     const responded = reportFilteredAlerts.filter(
       (item) => item.status === "Responded",
     ).length;
-    const missed = reportFilteredAlerts.filter((item) => item.status === "Missed").length;
+    const missed = reportFilteredAlerts.filter(
+      (item) => item.status === "Missed",
+    ).length;
     const escalated = reportFilteredAlerts.filter(
       (item) => item.status === "Escalated",
     ).length;
     const avgResponse =
-      reportFilteredAlerts.reduce((sum, item) => sum + (item.responseTime ?? 0), 0) /
-      Math.max(reportFilteredAlerts.length, 1);
+      reportFilteredAlerts.reduce(
+        (sum, item) => sum + (item.responseTime ?? 0),
+        0,
+      ) / Math.max(reportFilteredAlerts.length, 1);
     const criticalEvents = missed + escalated;
-    const riskScore = total === 0 ? 0 : Math.round((criticalEvents / total) * 100);
+    const riskScore =
+      total === 0 ? 0 : Math.round((criticalEvents / total) * 100);
     const uptime = 99.5 + (responded / Math.max(total, 1)) * 0.5;
 
     const countBy = (
       items: AlertHistory[],
       field: keyof AlertHistory,
     ): Record<string, number> =>
-      items.reduce((acc, item) => {
-        const value = String(item[field] ?? "Unassigned");
-        acc[value] = (acc[value] ?? 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      items.reduce(
+        (acc, item) => {
+          const value = String(item[field] ?? "Unassigned");
+          acc[value] = (acc[value] ?? 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
 
     const statusCounts = countBy(reportFilteredAlerts, "status");
     const siteCounts = countBy(reportFilteredAlerts, "site");
@@ -1244,9 +1263,14 @@ export default function HomeScreen() {
   const renderReportDetailModal = () => (
     <Modal visible={!!selectedReportAlert} transparent animationType="slide">
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContainer, { backgroundColor: colors.card }]}> 
-          <Text style={[styles.modalTitle, { color: colors.text }]}> {t("viewDetails")} </Text>
-          <Text style={{ color: colors.subText, marginBottom: 18 }}>Detailed alert record for incident review</Text>
+        <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
+          <Text style={[styles.modalTitle, { color: colors.text }]}>
+            {" "}
+            {t("viewDetails")}{" "}
+          </Text>
+          <Text style={{ color: colors.subText, marginBottom: 18 }}>
+            Detailed alert record for incident review
+          </Text>
           {selectedReportAlert ? (
             <View style={{ gap: 12 }}>
               {[
@@ -1255,19 +1279,46 @@ export default function HomeScreen() {
                 ["Zone", selectedReportAlert.zone ?? "—"],
                 ["Status", selectedReportAlert.status],
                 ["Alert Type", selectedReportAlert.alertType],
-                ["Date / Time", `${selectedReportAlert.date} ${selectedReportAlert.time}`],
-                ["Response Time", selectedReportAlert.responseTime ? `${selectedReportAlert.responseTime}s` : "—"],
+                [
+                  "Date / Time",
+                  `${selectedReportAlert.date} ${selectedReportAlert.time}`,
+                ],
+                [
+                  "Response Time",
+                  selectedReportAlert.responseTime
+                    ? `${selectedReportAlert.responseTime}s`
+                    : "—",
+                ],
                 ["Remarks", selectedReportAlert.remarks ?? "—"],
               ].map(([label, value]) => (
                 <View key={String(label)} style={{ marginBottom: 8 }}>
-                  <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 4 }}>{label}</Text>
-                  <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}>{value}</Text>
+                  <Text
+                    style={{
+                      color: colors.subText,
+                      fontSize: 11,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {label}
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.text,
+                      fontSize: 15,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {value}
+                  </Text>
                 </View>
               ))}
             </View>
           ) : null}
           <TouchableOpacity
-            style={[styles.modalBtn, { backgroundColor: colors.primary, marginTop: 20 }]}
+            style={[
+              styles.modalBtn,
+              { backgroundColor: colors.primary, marginTop: 20 },
+            ]}
             onPress={() => setSelectedReportAlert(null)}
           >
             <Text style={[styles.buttonText, { color: "#fff" }]}>Close</Text>
@@ -3900,18 +3951,25 @@ export default function HomeScreen() {
             {/* ══ REPORTS ══ */}
             {adminPage === "reports" && (
               <>
-                <View style={[styles.card, { backgroundColor: colors.card }]}> 
+                <View style={[styles.card, { backgroundColor: colors.card }]}>
                   <View style={styles.rowSpace}>
                     <View style={{ flex: 1, paddingRight: 6 }}>
-                      <Text style={[styles.sectionTitle, { color: colors.text }]}> 
-                        {t("reportTitle")} 
+                      <Text
+                        style={[styles.sectionTitle, { color: colors.text }]}
+                      >
+                        {t("reportTitle")}
                       </Text>
-                      <Text style={[styles.subtitle, { color: colors.subText }]}> 
-                        {t("reportFilters")} 
+                      <Text
+                        style={[styles.subtitle, { color: colors.subText }]}
+                      >
+                        {t("reportFilters")}
                       </Text>
                     </View>
                     <TouchableOpacity
-                      style={[styles.createBtn, { backgroundColor: colors.primary }]}
+                      style={[
+                        styles.createBtn,
+                        { backgroundColor: colors.primary },
+                      ]}
                       onPress={handleExportReport}
                     >
                       <Text style={styles.createBtnText}>{t("exportCSV")}</Text>
@@ -4078,8 +4136,8 @@ export default function HomeScreen() {
                             label === "Responded"
                               ? colors.success
                               : label === "Missed"
-                              ? colors.danger
-                              : colors.warning;
+                                ? colors.danger
+                                : colors.warning;
                           return (
                             <View
                               key={label}
@@ -4091,8 +4149,12 @@ export default function HomeScreen() {
                                   justifyContent: "space-between",
                                 }}
                               >
-                                <Text style={{ color: colors.text }}>{label}</Text>
-                                <Text style={{ color: colors.subText }}>{value}</Text>
+                                <Text style={{ color: colors.text }}>
+                                  {label}
+                                </Text>
+                                <Text style={{ color: colors.subText }}>
+                                  {value}
+                                </Text>
                               </View>
                               <View
                                 style={{
@@ -4186,7 +4248,10 @@ export default function HomeScreen() {
                           >
                             <View style={{ flex: 2 }}>
                               <Text
-                                style={[styles.tableRowPrimary, { color: colors.text }]}
+                                style={[
+                                  styles.tableRowPrimary,
+                                  { color: colors.text },
+                                ]}
                               >
                                 {item.guardName}
                               </Text>
@@ -4198,8 +4263,8 @@ export default function HomeScreen() {
                                     item.status === "Responded"
                                       ? colors.success
                                       : item.status === "Missed"
-                                      ? colors.danger
-                                      : colors.warning,
+                                        ? colors.danger
+                                        : colors.warning,
                                   fontWeight: "700",
                                 }}
                               >
@@ -4207,12 +4272,22 @@ export default function HomeScreen() {
                               </Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> 
+                              <Text
+                                style={[
+                                  styles.tableRowSecondary,
+                                  { color: colors.subText },
+                                ]}
+                              >
                                 {item.site || "—"}
                               </Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={[styles.tableRowSecondary, { color: colors.subText }]}> 
+                              <Text
+                                style={[
+                                  styles.tableRowSecondary,
+                                  { color: colors.subText },
+                                ]}
+                              >
                                 {item.time}
                               </Text>
                             </View>
@@ -4222,58 +4297,108 @@ export default function HomeScreen() {
                     </View>
                   </View>
 
-                  <View style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}>
-                    <View style={{
-                      flex: 1,
-                      minWidth: 160,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      padding: 18,
-                      backgroundColor: colors.bg,
-                    }}>
-                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1, }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 160,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        padding: 18,
+                        backgroundColor: colors.bg,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        }}
+                      >
                         {t("bySite")}
                       </Text>
                       {topSites.map(([site, value]) => (
                         <View key={site} style={{ marginBottom: 10 }}>
-                          <Text style={{ color: colors.text, fontWeight: "600" }}>{site}</Text>
-                          <Text style={{ color: colors.subText, fontSize: 12 }}>{value} alerts</Text>
+                          <Text
+                            style={{ color: colors.text, fontWeight: "600" }}
+                          >
+                            {site}
+                          </Text>
+                          <Text style={{ color: colors.subText, fontSize: 12 }}>
+                            {value} alerts
+                          </Text>
                         </View>
                       ))}
                     </View>
-                    <View style={{
-                      flex: 1,
-                      minWidth: 160,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      padding: 18,
-                      backgroundColor: colors.bg,
-                    }}>
-                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1, }}>
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 160,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        padding: 18,
+                        backgroundColor: colors.bg,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        }}
+                      >
                         {t("byZone")}
                       </Text>
                       {topZones.map(([zone, value]) => (
                         <View key={zone} style={{ marginBottom: 10 }}>
-                          <Text style={{ color: colors.text, fontWeight: "600" }}>{zone}</Text>
-                          <Text style={{ color: colors.subText, fontSize: 12 }}>{value} alerts</Text>
+                          <Text
+                            style={{ color: colors.text, fontWeight: "600" }}
+                          >
+                            {zone}
+                          </Text>
+                          <Text style={{ color: colors.subText, fontSize: 12 }}>
+                            {value} alerts
+                          </Text>
                         </View>
                       ))}
                     </View>
                   </View>
                 </View>
 
-                <View style={[styles.card, { backgroundColor: colors.card, marginTop: 12 }]}> 
-                  <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}> 
-                    {t("reportFilters")} 
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: colors.card, marginTop: 12 },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      { color: colors.text, marginBottom: 16 },
+                    ]}
+                  >
+                    {t("reportFilters")}
                   </Text>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 14 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      marginBottom: 14,
+                    }}
+                  >
                     {(["24h", "7d", "30d"] as const).map((frame) => (
                       <TouchableOpacity
                         key={frame}
@@ -4284,26 +4409,62 @@ export default function HomeScreen() {
                           borderRadius: 20,
                           borderWidth: 1,
                           borderColor:
-                            reportTimeframe === frame ? colors.primary : colors.border,
+                            reportTimeframe === frame
+                              ? colors.primary
+                              : colors.border,
                           backgroundColor:
-                            reportTimeframe === frame ? colors.primary : colors.inputBg,
+                            reportTimeframe === frame
+                              ? colors.primary
+                              : colors.inputBg,
                           marginRight: 10,
                           marginBottom: 10,
                         }}
                       >
-                        <Text style={{
-                          color: reportTimeframe === frame ? "#fff" : colors.text,
-                          fontWeight: "600",
-                        }}>
+                        <Text
+                          style={{
+                            color:
+                              reportTimeframe === frame ? "#fff" : colors.text,
+                            fontWeight: "600",
+                          }}
+                        >
                           {frame}
                         </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 12 }}>
-                    <View style={{ flex: 1, minWidth: 160, marginRight: 10, marginBottom: 10 }}>
-                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 6 }}>{t("filterBySite")}</Text>
-                      <View style={[styles.pickerField, { backgroundColor: colors.inputBg, borderColor: colors.border }]}> 
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 160,
+                        marginRight: 10,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 6,
+                        }}
+                      >
+                        {t("filterBySite")}
+                      </Text>
+                      <View
+                        style={[
+                          styles.pickerField,
+                          {
+                            backgroundColor: colors.inputBg,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
                         <Picker
                           selectedValue={reportSiteFilter}
                           onValueChange={(value) => {
@@ -4316,55 +4477,92 @@ export default function HomeScreen() {
                         >
                           <Picker.Item label="All Sites" value="all" />
                           {sites.map((site) => (
-                            <Picker.Item key={site.id} label={site.name} value={site.id} />
+                            <Picker.Item
+                              key={site.id}
+                              label={site.name}
+                              value={site.id}
+                            />
                           ))}
                         </Picker>
                       </View>
                     </View>
                     <View style={{ flex: 1, minWidth: 160, marginBottom: 10 }}>
-                      <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 6 }}>{t("byZone")}</Text>
-                      <View style={[styles.pickerField, { backgroundColor: colors.inputBg, borderColor: colors.border }]}> 
+                      <Text
+                        style={{
+                          color: colors.subText,
+                          fontSize: 11,
+                          marginBottom: 6,
+                        }}
+                      >
+                        {t("byZone")}
+                      </Text>
+                      <View
+                        style={[
+                          styles.pickerField,
+                          {
+                            backgroundColor: colors.inputBg,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
                         <Picker
                           selectedValue={reportZoneFilter}
-                          onValueChange={(value) => setReportZoneFilter(String(value))}
+                          onValueChange={(value) =>
+                            setReportZoneFilter(String(value))
+                          }
                           dropdownIconColor={colors.text}
                           itemStyle={{ color: colors.text }}
                           style={{ color: colors.text, width: "100%" }}
                         >
                           <Picker.Item label="All Zones" value="all" />
                           {availableReportZones.map((zone) => (
-                            <Picker.Item key={zone.id} label={zone.name} value={zone.id} />
+                            <Picker.Item
+                              key={zone.id}
+                              label={zone.name}
+                              value={zone.id}
+                            />
                           ))}
                         </Picker>
                       </View>
                     </View>
                   </View>
                   <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                    {(["all", "Responded", "Missed", "Escalated"] as const).map((status) => (
-                      <TouchableOpacity
-                        key={status}
-                        onPress={() => setReportStatusFilter(status)}
-                        style={{
-                          paddingHorizontal: 14,
-                          paddingVertical: 10,
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor:
-                            reportStatusFilter === status ? colors.primary : colors.border,
-                          backgroundColor:
-                            reportStatusFilter === status ? colors.primary : colors.inputBg,
-                          marginRight: 10,
-                          marginBottom: 10,
-                        }}
-                      >
-                        <Text style={{
-                          color: reportStatusFilter === status ? "#fff" : colors.text,
-                          fontWeight: "600",
-                        }}>
-                          {status === "all" ? "All Statuses" : status}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                    {(["all", "Responded", "Missed", "Escalated"] as const).map(
+                      (status) => (
+                        <TouchableOpacity
+                          key={status}
+                          onPress={() => setReportStatusFilter(status)}
+                          style={{
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 20,
+                            borderWidth: 1,
+                            borderColor:
+                              reportStatusFilter === status
+                                ? colors.primary
+                                : colors.border,
+                            backgroundColor:
+                              reportStatusFilter === status
+                                ? colors.primary
+                                : colors.inputBg,
+                            marginRight: 10,
+                            marginBottom: 10,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color:
+                                reportStatusFilter === status
+                                  ? "#fff"
+                                  : colors.text,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {status === "all" ? "All Statuses" : status}
+                          </Text>
+                        </TouchableOpacity>
+                      ),
+                    )}
                   </View>
                 </View>
 
