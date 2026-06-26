@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
@@ -92,6 +93,7 @@ export default function HomeScreen() {
     null,
   );
   const [winResponseSeconds, setWinResponseSeconds] = useState(0);
+  const [photoSeconds, setPhotoSeconds] = useState(180);
 
   // ── Admin UI ──
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -189,10 +191,12 @@ export default function HomeScreen() {
             rawSites.map((s: any) => ({
               ...s,
               id: s._id ?? s.id ?? "",
-              zones: (s.zones ?? []).map((z: any) => ({
-                ...z,
-                id: z._id ?? z.id ?? "",
-              })),
+              zones: Array.isArray(s.zones)
+                ? s.zones.map((z: any) => ({
+                    ...z,
+                    id: z._id ?? z.id ?? "",
+                  }))
+                : [],
             })),
           );
         }
@@ -272,12 +276,32 @@ export default function HomeScreen() {
   useEffect(() => {
     if (loggedInRole !== "admin") return;
 
+    // Load immediately
+    loadGuards();
+    loadAlerts();
+
+    // Refresh every 5 seconds
     const interval = setInterval(() => {
+      loadGuards();
       loadAlerts();
-    }, 10000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [loggedInRole]);
+  useEffect(() => {
+    if (loggedInRole !== "guard" || !activeGuard) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get(`/guards/${activeGuard.id}`);
+        setActiveGuard(res.data);
+      } catch (e) {
+        console.log("LOAD GUARD ERROR", e);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [loggedInRole, activeGuard?.id]);
 
   const configRef = useRef({ sites, shifts, alertGroups, escalationLevels });
   useEffect(() => {
@@ -288,6 +312,17 @@ export default function HomeScreen() {
       await api.put("/config", configRef.current);
     } catch (e) {
       console.error(e);
+    }
+  };
+  const loadGuards = async () => {
+    try {
+      const res = await api.get("/guards");
+
+      if (Array.isArray(res.data)) {
+        setGuards(res.data);
+      }
+    } catch (err) {
+      console.log("LOAD GUARDS ERROR", err);
     }
   };
   const loadAlerts = async () => {
@@ -328,6 +363,15 @@ export default function HomeScreen() {
     const timer = setTimeout(() => setResponseSeconds((s) => s - 1), 1000);
     return () => clearTimeout(timer);
   }, [responseSeconds, showAlert]);
+  useEffect(() => {
+    if (!showResolution) return;
+    if (photoSeconds <= 0) {
+      handlePhotoTimeout();
+      return;
+    }
+    const timer = setTimeout(() => setPhotoSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [photoSeconds, showResolution]);
 
   useEffect(() => {
     return () => {
@@ -341,28 +385,58 @@ export default function HomeScreen() {
       Alert.alert("Error", "Please enter ID and password.");
       return;
     }
+
     try {
       const res = await api.post("/auth/login", {
-        id: "LAXIT",
-        password: "LAXIT123",
+        id: loginId.trim(),
+        password: loginPassword.trim(),
       });
 
-      Alert.alert("SUCCESS", JSON.stringify(res.data));
-      return;
+      console.log("LOGIN SUCCESS:", res.data);
+
+      if (res.data.token) {
+        await AsyncStorage.setItem("token", res.data.token);
+        console.log("TOKEN SAVED:", res.data.token);
+      } else {
+        console.log("NO TOKEN RETURNED");
+      }
+
+      setLoggedInUser(res.data.user?.id || res.data.guard?.id);
+
+      setLoggedInRole(res.data.role);
+
+      if (res.data.role === "admin") {
+        setAdminPage("dashboard");
+      }
+
+      if (res.data.role === "guard") {
+        let guard = res.data.guard;
+
+        if (!guard.shiftStarted) {
+          const shiftRes = await api.post(`/guards/${guard.id}/shift/start`);
+
+          guard = shiftRes.data;
+        }
+
+        setActiveGuard(guard);
+
+        setTimerSeconds(
+          guard.alertGroupType === "RANDOM"
+            ? getGuardAlertInterval(guard)
+            : (guard.alertInterval ?? 1800),
+        );
+      }
     } catch (err: any) {
-      console.log("FULL ERROR:", err);
-      console.log("STATUS:", err?.response?.status);
-      console.log("DATA:", err?.response?.data);
-      console.log("MESSAGE:", err?.message);
+      console.log("LOGIN ERROR:", err);
 
       Alert.alert(
-        "ERROR",
-        err?.response?.data?.message || err?.message || JSON.stringify(err),
+        "Login Failed",
+        err?.response?.data?.message || "Unable to login",
       );
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setLoggedInUser(null);
     setLoggedInRole(null);
     setActiveGuard(null);
@@ -374,50 +448,26 @@ export default function HomeScreen() {
   // ── Shift ──
   const startShift = async () => {
     if (!activeGuard) return;
+
     const res = await api.post(`/guards/${activeGuard.id}/shift/start`);
     const updated = res.data;
+
     setActiveGuard(updated);
+
     setGuards((prev) =>
       prev.map((g) => (g.id === activeGuard.id ? updated : g)),
     );
+
     if (updated.alertGroupType === "RANDOM") {
       setTimerSeconds(getGuardAlertInterval(updated));
     } else {
       setTimerSeconds(updated.alertInterval ?? 1800);
     }
+
     Alert.alert(
       "Shift Started",
       `Your shift will end at ${updated.shiftEndTime}`,
     );
-  };
-
-  const endShift = () => {
-    Alert.alert("End Shift", "Are you sure?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "End Shift",
-        style: "destructive",
-        onPress: async () => {
-          if (activeGuard) {
-            await api.post(`/guards/${activeGuard.id}/shift/end`);
-            setGuards((prev) =>
-              prev.map((g) =>
-                g.id === activeGuard.id
-                  ? {
-                      ...g,
-                      shiftStarted: false,
-                      isActive: false,
-                      shiftStartTime: "",
-                      shiftEndTime: "",
-                    }
-                  : g,
-              ),
-            );
-          }
-          handleLogout();
-        },
-      },
-    ]);
   };
 
   // ── Alert handling ──
@@ -430,20 +480,47 @@ export default function HomeScreen() {
     safePlay();
   };
 
-  const handleMissedAlert = async () => {
+  const recordMissedAlert = async () => {
     const guard = activeGuardRef.current;
     if (!guard) return;
     const gameType = currentGameTypeRef.current;
-    await api.post(`/guards/${guard.id}/alerts`, {
-      status: "Missed",
-      alertType: gameType,
-      responseTime: 0,
-      remarks: "",
-      photoUri: null,
-    });
+    try {
+      const res = await api.post(`/guards/${guard.id}/alerts`, {
+        status: "Missed",
+        alertType: gameType,
+        responseTime: 0,
+        remarks: "",
+        photoUri: null,
+      });
+      if (res.data?.guard) {
+        setActiveGuard(res.data.guard);
+        setGuards((prev) =>
+          prev.map((g) => (g.id === guard.id ? res.data.guard : g)),
+        );
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleMissedAlert = async () => {
+    await recordMissedAlert();
     setShowAlert(false);
     setGameDisabled(true);
     safePause();
+  };
+
+  const handlePhotoTimeout = async () => {
+    await recordMissedAlert();
+    setShowResolution(false);
+    setResolutionPhotoUri(null);
+    setGameDisabled(true);
+    safePause();
+    if (activeGuard?.alertGroupType === "RANDOM") {
+      setTimerSeconds(getGuardAlertInterval(activeGuard));
+    } else {
+      setTimerSeconds(activeGuard?.alertInterval ?? 1800);
+    }
   };
 
   const handleGameWin = () => {
@@ -451,6 +528,7 @@ export default function HomeScreen() {
     setGameDisabled(true);
     setShowAlert(false);
     safePause();
+    setPhotoSeconds(180);
     setShowResolution(true);
   };
 
@@ -488,7 +566,9 @@ export default function HomeScreen() {
   };
 
   // ── CRUD operations ──
+
   const addGuard = async () => {
+    console.log("ADD GUARD BUTTON CLICKED");
     if (
       !newGuardId.trim() ||
       !newGuardName.trim() ||
@@ -526,30 +606,48 @@ export default function HomeScreen() {
       );
     }
   };
-  const blockGuard = async (guardId: string) => {
+  const deleteGuard = async (guardId: string, guardName: string) => {
+    const confirmed =
+      Platform.OS === "web"
+        ? window.confirm(`Delete ${guardName}? This cannot be undone.`)
+        : await new Promise((resolve) => {
+            Alert.alert(
+              "Delete Guard",
+              `Are you sure you want to delete ${guardName}? This cannot be undone.`,
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                  onPress: () => resolve(false),
+                },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: () => resolve(true),
+                },
+              ],
+            );
+          });
+
+    if (!confirmed) return;
+
     try {
-      const res = await api.put(`/guards/${guardId}/block`);
-
-      setGuards((prev) => prev.map((g) => (g.id === guardId ? res.data : g)));
-
-      Alert.alert("Success", "Guard blocked");
-    } catch (err) {
-      console.log(err);
+      await api.delete(`/guards/${guardId}`);
+      setGuards((prev) => prev.filter((g) => g.id !== guardId));
+      if (Platform.OS === "web") {
+        window.alert("Guard deleted");
+      } else {
+        Alert.alert("Success", "Guard deleted");
+      }
+    } catch (err: any) {
+      console.log("DELETE GUARD ERROR:", err.response?.data || err);
+      if (Platform.OS === "web") {
+        window.alert("Failed to delete guard");
+      } else {
+        Alert.alert("Error", "Failed to delete guard");
+      }
     }
   };
-
-  const unblockGuard = async (guardId: string) => {
-    try {
-      const res = await api.put(`/guards/${guardId}/unblock`);
-
-      setGuards((prev) => prev.map((g) => (g.id === guardId ? res.data : g)));
-
-      Alert.alert("Success", "Guard unblocked");
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
   const openEditModal = (guard: Guard) => {
     setEditingGuard(guard);
     setEditName(guard.name);
@@ -619,102 +717,205 @@ export default function HomeScreen() {
     });
     setEditingSite(null);
   };
-  const deleteSite = (siteId: string) => {
-    Alert.alert(
-      "Delete Site",
-      "This will also remove all zones in this site.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await api.delete(`/sites/${siteId}`);
+  const deleteSite = async (siteId: string, siteName: string) => {
+    const confirmed =
+      Platform.OS === "web"
+        ? window.confirm(
+            `Delete ${siteName}? This will also delete all its zones.`,
+          )
+        : await new Promise((resolve) => {
+            Alert.alert(
+              "Delete Site",
+              `Delete ${siteName}? This will also delete all its zones.`,
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                  onPress: () => resolve(false),
+                },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: () => resolve(true),
+                },
+              ],
+            );
+          });
 
-              setSites((prev) => prev.filter((s) => s.id !== siteId));
+    if (!confirmed) return;
 
-              Alert.alert("Success", "Site deleted successfully");
-            } catch (err) {
-              console.log("DELETE SITE ERROR", err);
+    try {
+      await api.delete(`/sites/${siteId}`);
 
-              Alert.alert("Error", "Failed to delete site");
-            }
-          },
-        },
-      ],
-    );
+      setSites((prev) => prev.filter((s) => s.id !== siteId));
+
+      if (Platform.OS === "web") {
+        window.alert("Site deleted");
+      } else {
+        Alert.alert("Success", "Site deleted");
+      }
+    } catch (err: any) {
+      console.log(err);
+
+      if (Platform.OS === "web") {
+        window.alert("Failed to delete site");
+      } else {
+        Alert.alert("Error", "Failed to delete site");
+      }
+    }
   };
 
   // Zone CRUD
-  const doCreateZone = () => {
+  const doCreateZone = async () => {
     if (!createZoneName.trim() || !createZoneSiteId) {
       Alert.alert("Error", "Enter a zone name and select a site.");
       return;
     }
-    const newZone: Zone = {
-      id: Date.now().toString(),
-      name: createZoneName.trim(),
-      siteId: createZoneSiteId,
-    };
-    setSites((prev) => {
-      const updated = prev.map((s) =>
-        s.id === createZoneSiteId ? { ...s, zones: [...s.zones, newZone] } : s,
-      );
-      setTimeout(() => syncConfig(), 0);
-      return updated;
-    });
-    setCreateZoneName("");
-    setCreateZoneSiteId("");
-    setShowCreateZone(false);
-    Alert.alert("✅ Created", "Zone created successfully.");
-  };
 
+    try {
+      await api.post("/zones", {
+        name: createZoneName.trim(),
+        siteId: createZoneSiteId,
+      });
+
+      const [sitesRes, zonesRes] = await Promise.all([
+        api.get("/sites"),
+        api.get("/zones"),
+      ]);
+
+      const mappedSites = sitesRes.data.map((site: any) => ({
+        id: site._id,
+        name: site.name,
+        zones: zonesRes.data
+          .filter((z: any) => z.siteId === site._id)
+          .map((z: any) => ({
+            id: z._id,
+            name: z.name,
+            siteId: z.siteId,
+          })),
+      }));
+
+      setSites(mappedSites);
+
+      setCreateZoneName("");
+      setCreateZoneSiteId("");
+      setShowCreateZone(false);
+
+      Alert.alert("Success", "Zone created successfully");
+    } catch (err) {
+      console.log(err);
+      Alert.alert("Error", "Failed to create zone");
+    }
+  };
   const openEditZone = (siteId: string, zone: Zone) => {
-    setEditingZone({ siteId, zone });
+    setEditingZone({
+      siteId,
+      zone,
+    });
+
     setEditZoneName(zone.name);
   };
-  const saveEditZone = () => {
-    if (!editingZone || !editZoneName.trim()) return;
-    setSites((prev) => {
-      const updated = prev.map((s) =>
-        s.id === editingZone.siteId
-          ? {
-              ...s,
-              zones: s.zones.map((z) =>
-                z.id === editingZone.zone.id
-                  ? { ...z, name: editZoneName.trim() }
-                  : z,
-              ),
-            }
-          : s,
-      );
-      setTimeout(() => syncConfig(), 0);
-      return updated;
-    });
-    setEditingZone(null);
-  };
-  const deleteZone = (siteId: string, zoneId: string) => {
-    Alert.alert("Delete Zone", "Are you sure?", [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("delete"),
-        style: "destructive",
-        onPress: () => {
-          setSites((prev) => {
-            const updated = prev.map((s) =>
-              s.id === siteId
-                ? { ...s, zones: s.zones.filter((z) => z.id !== zoneId) }
-                : s,
-            );
-            setTimeout(() => syncConfig(), 0);
-            return updated;
-          });
-        },
-      },
-    ]);
-  };
+  const saveEditZone = async () => {
+    if (!editingZone) return;
 
+    try {
+      await api.put(`/zones/${editingZone.zone.id}`, {
+        name: editZoneName,
+        siteId: editingZone.siteId,
+      });
+
+      const [sitesRes, zonesRes] = await Promise.all([
+        api.get("/sites"),
+        api.get("/zones"),
+      ]);
+
+      const mappedSites = sitesRes.data.map((site: any) => ({
+        id: site._id,
+        name: site.name,
+        zones: zonesRes.data
+          .filter((z: any) => z.siteId === site._id)
+          .map((z: any) => ({
+            id: z._id,
+            name: z.name,
+            siteId: z.siteId,
+          })),
+      }));
+
+      setSites(mappedSites);
+
+      setEditingZone(null);
+      setEditZoneName("");
+
+      Alert.alert("Success", "Zone updated");
+    } catch (err) {
+      console.log(err);
+      Alert.alert("Error", "Failed to update zone");
+    }
+  };
+  const deleteZone = async (
+    siteId: string,
+    zoneId: string,
+    zoneName: string,
+  ) => {
+    const confirmed =
+      Platform.OS === "web"
+        ? window.confirm(`Delete zone "${zoneName}"?`)
+        : await new Promise((resolve) => {
+            Alert.alert("Delete Zone", `Delete "${zoneName}"?`, [
+              {
+                text: "Cancel",
+                style: "cancel",
+                onPress: () => resolve(false),
+              },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => resolve(true),
+              },
+            ]);
+          });
+
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/zones/${zoneId}`);
+
+      const [sitesRes, zonesRes] = await Promise.all([
+        api.get("/sites"),
+        api.get("/zones"),
+      ]);
+
+      const mappedSites = sitesRes.data.map((site: any) => ({
+        id: site._id,
+        name: site.name,
+        zones: zonesRes.data
+          .filter((z: any) => z.siteId === site._id)
+          .map((z: any) => ({
+            id: z._id,
+            name: z.name,
+            siteId: z.siteId,
+          })),
+      }));
+
+      setSites(mappedSites);
+
+      if (Platform.OS === "web") {
+        window.alert("Zone deleted");
+      } else {
+        Alert.alert("Success", "Zone deleted");
+      }
+    } catch (err: any) {
+      console.log("DELETE ZONE ERROR:", err.response?.data || err);
+
+      const message = JSON.stringify(err.response?.data || err.message || err);
+
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("Error", message);
+      }
+    }
+  };
   // Alert group CRUD
   const addAlertGroup = () => {
     if (!newGroupName.trim()) return;
@@ -826,11 +1027,24 @@ export default function HomeScreen() {
     g.totalAlerts === 0
       ? 100
       : Math.round((g.respondedAlerts / g.totalAlerts) * 100);
+  console.log("SITES DATA", JSON.stringify(sites, null, 2));
+  const escalationReport = useMemo(() => {
+    return guards
+      .filter((g) => g.missedAlerts > 0)
+      .map((g) => {
+        const triggeredLevels = escalationLevels
+          .filter((lvl: any) => g.missedAlerts >= lvl.missedThreshold)
+          .sort((a: any, b: any) => b.level - a.level);
+        return { guard: g, level: triggeredLevels[0] };
+      })
+      .filter((entry) => entry.level)
+      .sort((a, b) => b.guard.missedAlerts - a.guard.missedAlerts);
+  }, [guards, escalationLevels]);
 
   const allZones = useMemo(
     () =>
       sites.flatMap((site) =>
-        site.zones.map((z) => ({
+        (site.zones || []).map((z) => ({
           ...z,
           siteId: site.id,
           siteName: site.name,
@@ -853,6 +1067,17 @@ export default function HomeScreen() {
         <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
           <Text style={[styles.modalTitle, { color: colors.text }]}>
             Alert Resolution
+          </Text>
+          <Text
+            style={{
+              color: colors.warning,
+              textAlign: "center",
+              fontSize: 24,
+              fontWeight: "bold",
+              marginBottom: 8,
+            }}
+          >
+            {formatTime(photoSeconds)}
           </Text>
 
           {!!resolutionPhotoUri && (
@@ -1113,11 +1338,6 @@ export default function HomeScreen() {
     }
     return (
       <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
-        <LanguageToggle
-          language={language}
-          setLanguage={setLanguage}
-          colors={colors}
-        />
         <View style={[styles.padded, { alignItems: "center" }]}>
           <Text style={[styles.guardNameLarge, { color: colors.text }]}>
             {activeGuard.name}
@@ -1146,27 +1366,51 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View style={styles.statsRow}>
-                <KPICard
-                  label={t("totalAlerts")}
-                  value={activeGuard.totalAlerts}
-                  color={colors.text}
-                  icon="📊"
-                  colors={colors}
-                />
-                <KPICard
-                  label={t("responded")}
-                  value={activeGuard.respondedAlerts}
-                  color={colors.success}
-                  icon="✅"
-                  colors={colors}
-                />
-                <KPICard
-                  label={t("missed")}
-                  value={activeGuard.missedAlerts}
-                  color={colors.danger}
-                  icon="❌"
-                  colors={colors}
-                />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setAdminPage("reports")}
+                >
+                  <View style={{ width: 170 }}>
+                    <KPICard
+                      label={t("totalAlerts")}
+                      value={activeGuard.totalAlerts}
+                      color={colors.text}
+                      icon="📊"
+                      colors={colors}
+                    />
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setAdminPage("reports")}
+                >
+                  <View style={{ width: 170 }}>
+                    <KPICard
+                      label={t("responded")}
+                      value={activeGuard.respondedAlerts}
+                      color={colors.success}
+                      icon="✅"
+                      colors={colors}
+                    />
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setAdminPage("reports")}
+                >
+                  <View style={{ width: 170 }}></View>
+                  <KPICard
+                    label={t("missed")}
+                    value={
+                      activeGuard.totalAlerts - activeGuard.respondedAlerts
+                    }
+                    color={colors.danger}
+                    icon="❌"
+                    colors={colors}
+                  />
+                </TouchableOpacity>
+
+                <View style={{ width: 170 }}></View>
                 <KPICard
                   label={t("compliance")}
                   value={`${getComplianceRate(activeGuard)}%`}
@@ -1175,25 +1419,8 @@ export default function HomeScreen() {
                   colors={colors}
                 />
               </View>
-
-              <TouchableOpacity
-                style={[styles.mainButton, { backgroundColor: colors.danger }]}
-                onPress={endShift}
-              >
-                <Text style={styles.buttonText}>{t("endShift")}</Text>
-              </TouchableOpacity>
             </>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.mainButton,
-                { backgroundColor: colors.success, marginTop: 30 },
-              ]}
-              onPress={startShift}
-            >
-              <Text style={styles.buttonText}>{t("startShift")}</Text>
-            </TouchableOpacity>
-          )}
+          ) : null}
           <TouchableOpacity
             style={[styles.mainButton, { backgroundColor: colors.muted }]}
             onPress={handleLogout}
@@ -1243,11 +1470,6 @@ export default function HomeScreen() {
           <Text style={[styles.adminHeaderTitle, { color: colors.text }]}>
             {pageTitles[adminPage]}
           </Text>
-          <LanguageToggle
-            language={language}
-            setLanguage={setLanguage}
-            colors={colors}
-          />
         </View>
         {sidebarVisible && (
           <TouchableOpacity
@@ -1264,34 +1486,54 @@ export default function HomeScreen() {
             {adminPage === "dashboard" && (
               <>
                 <View style={styles.kpiGrid}>
-                  <KPICard
-                    label={t("totalAlerts")}
-                    value={totalAlerts}
-                    color={colors.text}
-                    icon="📊"
-                    colors={colors}
-                  />
-                  <KPICard
-                    label={t("responded")}
-                    value={responded}
-                    color={colors.success}
-                    icon="✅"
-                    colors={colors}
-                  />
-                  <KPICard
-                    label={t("missed")}
-                    value={missed}
-                    color={colors.danger}
-                    icon="❌"
-                    colors={colors}
-                  />
-                  <KPICard
-                    label={t("onDutyCount")}
-                    value={activeCount}
-                    color={colors.primary}
-                    icon="👥"
-                    colors={colors}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("reports")}
+                  >
+                    <KPICard
+                      label={t("totalAlerts")}
+                      value={totalAlerts}
+                      color={colors.text}
+                      icon="📊"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("reports")}
+                  >
+                    <KPICard
+                      label={t("responded")}
+                      value={responded}
+                      color={colors.success}
+                      icon="✅"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("reports")}
+                  >
+                    <KPICard
+                      label={t("missed")}
+                      value={missed}
+                      color={colors.danger}
+                      icon="❌"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("users")}
+                  >
+                    <KPICard
+                      label={t("onDutyCount")}
+                      value={activeCount}
+                      color={colors.primary}
+                      icon="👥"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
                 </View>
                 <View
                   style={[
@@ -1357,7 +1599,7 @@ export default function HomeScreen() {
                   </Text>
                   {alertHistory.slice(0, 5).map((item) => (
                     <View
-                      key={item.id}
+                      key={`${item.id}-${item.timestamp}`}
                       style={[
                         styles.alertItem,
                         {
@@ -1403,7 +1645,7 @@ export default function HomeScreen() {
               <>
                 {guards.map((guard) => (
                   <View
-                    key={guard.id}
+                    key={`${guard.id}-${guard.name}`}
                     style={[styles.userCard, { backgroundColor: colors.card }]}
                   >
                     <View style={{ flex: 1 }}>
@@ -1417,11 +1659,9 @@ export default function HomeScreen() {
                           style={[
                             styles.statusBadge,
                             {
-                              backgroundColor: guard.isBlocked
-                                ? colors.danger
-                                : guard.shiftStarted
-                                  ? colors.badgeSuccess
-                                  : colors.inputBg,
+                              backgroundColor: guard.shiftStarted
+                                ? colors.badgeSuccess
+                                : colors.inputBg,
                             },
                           ]}
                         >
@@ -1429,19 +1669,13 @@ export default function HomeScreen() {
                             style={[
                               styles.statusBadgeText,
                               {
-                                color: guard.isBlocked
-                                  ? "#fff"
-                                  : guard.shiftStarted
-                                    ? colors.badgeSuccessText
-                                    : colors.subText,
+                                color: guard.shiftStarted
+                                  ? colors.badgeSuccessText
+                                  : colors.subText,
                               },
                             ]}
                           >
-                            {guard.isBlocked
-                              ? "BLOCKED"
-                              : guard.shiftStarted
-                                ? "ACTIVE"
-                                : "INACTIVE"}
+                            {guard.shiftStarted ? "ACTIVE" : "INACTIVE"}
                           </Text>
                         </View>
                       </View>
@@ -1476,27 +1710,15 @@ export default function HomeScreen() {
                       >
                         <Text style={styles.actionBtnText}>{t("edit")}</Text>
                       </TouchableOpacity>
-                      {!guard.isBlocked ? (
-                        <TouchableOpacity
-                          style={[
-                            styles.actionBtn,
-                            { backgroundColor: colors.danger },
-                          ]}
-                          onPress={() => blockGuard(guard.id)}
-                        >
-                          <Text style={styles.actionBtnText}>Block</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity
-                          style={[
-                            styles.actionBtn,
-                            { backgroundColor: colors.success },
-                          ]}
-                          onPress={() => unblockGuard(guard.id)}
-                        >
-                          <Text style={styles.actionBtnText}>Unblock</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtn,
+                          { backgroundColor: colors.danger },
+                        ]}
+                        onPress={() => deleteGuard(guard.id, guard.name)}
+                      >
+                        <Text style={styles.actionBtnText}>Delete</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ))}
@@ -1581,12 +1803,12 @@ export default function HomeScreen() {
                       }}
                     >
                       <Picker.Item
-                        label={t("selectSite") || "Select Site"}
+                        label={t("Select Site") || "Select Site"}
                         value=""
                       />
-                      {sites.map((site) => (
+                      {sites.map((site, index) => (
                         <Picker.Item
-                          key={site.id}
+                          key={`site-${site.id || "noid"}-${index}`}
                           label={site.name}
                           value={site.id}
                         />
@@ -1620,7 +1842,7 @@ export default function HomeScreen() {
                           value=""
                         />
                         {(
-                          sites.find((st) => st.id === newGuardSite)?.zones ||
+                          sites.find((st) => st.id === newGuardSite)?.zones ??
                           []
                         ).map((zone) => (
                           <Picker.Item
@@ -1654,7 +1876,7 @@ export default function HomeScreen() {
                       }}
                     >
                       <Picker.Item
-                        label={t("selectShift") || "Select Shift"}
+                        label={t("Select Shift") || "Select Shift"}
                         value=""
                       />
                       {shifts.map((shift) => (
@@ -1688,7 +1910,7 @@ export default function HomeScreen() {
                       }}
                     >
                       <Picker.Item
-                        label={t("selectAlertGroup") || "Select Alert Group"}
+                        label={t("Select AlertGroup") || "Select Alert Group"}
                         value=""
                       />
                       {alertGroups.map((group) => (
@@ -1781,7 +2003,7 @@ export default function HomeScreen() {
                       ).length;
                       return (
                         <View
-                          key={site.id}
+                          key={`${site.id}-${i}`}
                           style={[
                             styles.tableRow,
                             {
@@ -1816,14 +2038,6 @@ export default function HomeScreen() {
                               >
                                 {site.name}
                               </Text>
-                              <Text
-                                style={[
-                                  styles.tableRowSecondary,
-                                  { color: colors.subText },
-                                ]}
-                              >
-                                ID: {site.id}
-                              </Text>
                             </View>
                           </View>
                           <View style={{ flex: 1, alignItems: "flex-start" }}>
@@ -1839,7 +2053,7 @@ export default function HomeScreen() {
                                   { color: colors.badgePrimaryText },
                                 ]}
                               >
-                                {site.zones.length}
+                                {(site.zones || []).length}
                               </Text>
                             </View>
                           </View>
@@ -1884,7 +2098,7 @@ export default function HomeScreen() {
                                 styles.tblDeleteBtn,
                                 { backgroundColor: colors.danger + "18" },
                               ]}
-                              onPress={() => deleteSite(site.id)}
+                              onPress={() => deleteSite(site.id, site.name)}
                             >
                               <Text
                                 style={[
@@ -2076,7 +2290,7 @@ export default function HomeScreen() {
                     {[{ id: "all", name: t("allSites") }, ...sites].map(
                       (site) => (
                         <TouchableOpacity
-                          key={site.id}
+                          key={`${site.id}-${site.name}`}
                           style={[
                             styles.filterPill,
                             {
@@ -2136,7 +2350,7 @@ export default function HomeScreen() {
                   ) : (
                     filteredZones.map((zone, i) => (
                       <View
-                        key={zone.id}
+                        key={`${zone.siteId}-${zone.id}-${i}`}
                         style={[
                           styles.tableRow,
                           {
@@ -2217,7 +2431,9 @@ export default function HomeScreen() {
                               styles.tblDeleteBtn,
                               { backgroundColor: colors.danger + "18" },
                             ]}
-                            onPress={() => deleteZone(zone.siteId, zone.id)}
+                            onPress={() =>
+                              deleteZone(zone.siteId, zone.id, zone.name)
+                            }
                           >
                             <Text
                               style={[
@@ -2292,9 +2508,9 @@ export default function HomeScreen() {
                         >
                           <Picker.Item label="Select Site" value="" />
 
-                          {sites.map((site) => (
+                          {sites.map((site, index) => (
                             <Picker.Item
-                              key={site.id}
+                              key={`edit-site-${site.id || "noid"}-${index}`}
                               label={site.name}
                               value={site.id}
                             />
@@ -2487,9 +2703,78 @@ export default function HomeScreen() {
             {/* ══ ESCALATION ══ */}
             {adminPage === "escalation" && (
               <>
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: colors.card, marginBottom: 20 },
+                  ]}
+                >
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    🚨 Escalation Report
+                  </Text>
+                  <Text
+                    style={[
+                      styles.guardDetail,
+                      { color: colors.subText, marginBottom: 12 },
+                    ]}
+                  >
+                    Guards who have reached a missed-alert threshold
+                  </Text>
+                  {escalationReport.length === 0 ? (
+                    <Text style={{ color: colors.subText }}>
+                      No escalations right now.
+                    </Text>
+                  ) : (
+                    escalationReport.map(({ guard, level }) => (
+                      <View
+                        key={guard.id}
+                        style={[
+                          styles.alertItem,
+                          {
+                            backgroundColor: colors.bg,
+                            borderLeftColor: colors.danger,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.alertGuardName,
+                            { color: colors.text },
+                          ]}
+                        >
+                          {guard.name} ({guard.id})
+                        </Text>
+                        <Text
+                          style={[styles.alertTime, { color: colors.subText }]}
+                        >
+                          {guard.missedAlerts} missed alerts — Level{" "}
+                          {level.level}: {level.name}
+                        </Text>
+                        <Text
+                          style={{
+                            color: colors.danger,
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          📞 Notify: {level.phone}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: colors.text, marginBottom: 8 },
+                  ]}
+                >
+                  Escalation Levels (Settings)
+                </Text>
                 {escalationLevels.map((level) => (
                   <View
-                    key={level._id}
+                    key={`${level._id}-${level.level}`}
                     style={[
                       styles.card,
                       { backgroundColor: colors.card, marginBottom: 12 },
@@ -2537,7 +2822,11 @@ export default function HomeScreen() {
                       ]}
                       value={String(level.missedThreshold)}
                       onChangeText={(txt) =>
-                        updateEscalation(level._id, "name", txt)
+                        updateEscalation(
+                          level._id,
+                          "missedThreshold",
+                          parseInt(txt) || 0,
+                        )
                       }
                       keyboardType="numeric"
                       placeholderTextColor={colors.subText}
@@ -2561,31 +2850,46 @@ export default function HomeScreen() {
                     marginBottom: 20,
                   }}
                 >
-                  <KPICard
-                    label={t("totalAlerts")}
-                    value={totalAlerts}
-                    color={colors.text}
-                    icon="📊"
-                    colors={colors}
-                  />
-                  <KPICard
-                    label={t("responded")}
-                    value={responded}
-                    color={colors.success}
-                    icon="✅"
-                    colors={colors}
-                  />
-                  <KPICard
-                    label={t("missed")}
-                    value={missed}
-                    color={colors.danger}
-                    icon="❌"
-                    colors={colors}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("reports")}
+                  >
+                    <KPICard
+                      label={t("totalAlerts")}
+                      value={totalAlerts}
+                      color={colors.text}
+                      icon="📊"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("reports")}
+                  >
+                    <KPICard
+                      label={t("responded")}
+                      value={responded}
+                      color={colors.success}
+                      icon="✅"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAdminPage("reports")}
+                  >
+                    <KPICard
+                      label={t("missed")}
+                      value={missed}
+                      color={colors.danger}
+                      icon="❌"
+                      colors={colors}
+                    />
+                  </TouchableOpacity>
                 </View>
                 {alertHistory.slice(0, 15).map((item) => (
                   <View
-                    key={item.id}
+                    key={`${item.id}-${item.timestamp}`}
                     style={[
                       styles.alertItem,
                       {
@@ -2688,7 +2992,7 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                   {shifts.map((shift) => (
                     <View
-                      key={shift.id}
+                      key={`${shift.id}-${shift.name}`}
                       style={[
                         styles.rowSpace,
                         {
@@ -2819,12 +3123,12 @@ export default function HomeScreen() {
                   }}
                 >
                   <Picker.Item
-                    label={t("selectSite") || "Select Site"}
+                    label={t("Select Site") || "Select Site"}
                     value=""
                   />
-                  {sites.map((site) => (
+                  {sites.map((site, index) => (
                     <Picker.Item
-                      key={site.id}
+                      key={`create-zone-site-${site.id || "noid"}-${index}`}
                       label={site.name}
                       value={site.id}
                     />
@@ -2857,10 +3161,10 @@ export default function HomeScreen() {
                       label={t("selectZone") || "Select Zone"}
                       value=""
                     />
-                    {(sites.find((st) => st.id === editSite)?.zones || []).map(
-                      (zone) => (
+                    {(sites.find((st) => st.id === editSite)?.zones ?? []).map(
+                      (zone, index) => (
                         <Picker.Item
-                          key={zone.id}
+                          key={`zone-${zone.id || "noid"}-${index}`}
                           label={zone.name}
                           value={zone.id}
                         />
@@ -2891,12 +3195,12 @@ export default function HomeScreen() {
                   }}
                 >
                   <Picker.Item
-                    label={t("selectShift") || "Select Shift"}
+                    label={t("Select Shift") || "Select Shift"}
                     value=""
                   />
-                  {shifts.map((shift) => (
+                  {shifts.map((shift, index) => (
                     <Picker.Item
-                      key={shift.id}
+                      key={`edit-shift-${shift.id || "noid"}-${index}`}
                       label={shift.name}
                       value={shift.id}
                     />
@@ -2925,12 +3229,12 @@ export default function HomeScreen() {
                   }}
                 >
                   <Picker.Item
-                    label={t("selectAlertGroup") || "Select Alert Group"}
+                    label={t("Select AlertGroup") || "Select Alert Group"}
                     value=""
                   />
                   {alertGroups.map((group) => (
                     <Picker.Item
-                      key={group.id}
+                      key={`${group.id}-${group.name}`}
                       label={group.name}
                       value={group.id}
                     />

@@ -11,15 +11,27 @@
     },
     "android": {
       "package": "com.laxit.nightguard",
-      "permissions": ["INTERNET", "VIBRATE"],
-      "usesCleartextTraffic": true
+      "permissions": ["INTERNET", "VIBRATE"]
     },
-    "plugins": ["expo-router", "expo-build-properties"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "2fc1fc6a-b279-4250-9f93-a37ed842b827"
+        "projectId": "d03f9f2e-36ee-43a9-b521-a602bf9bdd40"
       }
     },
-    "owner": "laxitghghghghggh"
+    "owner": "laxitghgh"
   }
 }

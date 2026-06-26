@@ -9,9 +9,10 @@ const router = express.Router();
 
 // Login
 router.post("/login", async (req, res) => {
-  try {
-    console.log("LOGIN BODY:", req.body);
+  console.log("LOGIN HIT");
+  console.log("BODY:", req.body);
 
+  try {
     const { id, password } = req.body;
 
     if (!id || !password) {
@@ -21,44 +22,40 @@ router.post("/login", async (req, res) => {
     }
 
     // Admin login
-   // Admin login
-const admin = await Admin.findOne({ username: id });
+    // Admin login
+    const admin = await Admin.findOne({ username: id });
 
-if (admin) {
-  const isAdminMatch = await bcrypt.compare(
-    password,
-    admin.passwordHash
-  );
+    if (admin) {
+      const isAdminMatch = await bcrypt.compare(password, admin.passwordHash);
 
-  if (isAdminMatch) {
-    const token = jwt.sign(
-      {
-        id: admin.username,
-        role: "admin",
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "30d" }
-    );
+      if (isAdminMatch) {
+        const token = jwt.sign(
+          {
+            id: admin.username,
+            role: "admin",
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "30d" },
+        );
 
-    return res.json({
-      token,
-      role: "admin",
-      user: {
-        id: admin.username,
-        name: "Administrator",
-      },
-    });
-  }
-}
-     
+        return res.json({
+          token,
+          role: "admin",
+          user: {
+            id: admin.username,
+            name: "Administrator",
+          },
+        });
+      }
+    }
 
     // Guard login
     const guard = await Guard.findOne({ id });
     if (guard?.isBlocked) {
-  return res.status(403).json({
-    message: "Account is blocked. Contact supervisor.",
-  });
-}
+      return res.status(403).json({
+        message: "Account is blocked. Contact supervisor.",
+      });
+    }
 
     if (!guard) {
       console.log("Guard not found:", id);

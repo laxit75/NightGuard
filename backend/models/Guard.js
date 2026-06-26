@@ -22,24 +22,17 @@ const guardSchema = new mongoose.Schema(
     alertInterval: Number,
 
     alertGroupType: {
-  type: String,
-  default: "FIXED"
-},
-isBlocked: {
-  type: Boolean,
-  default: false,
-},
-role: { type: String, default: "guard" },
-
-isBlocked: {
-  type: Boolean,
-  default: false,
-},
-isBlocked: {
-  type: Boolean,
-  default: false,
-},
-    role: { type: String, default: "guard" },
+      type: String,
+      default: "FIXED",
+    },
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
+    role: {
+      type: String,
+      default: "guard",
+    },
   },
   { timestamps: true },
 );

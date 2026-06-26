@@ -44,8 +44,19 @@ export const KPICard: React.FC<{
   icon: string;
   colors: Record<string, string>;
 }> = ({ label, value, color, icon, colors }) => (
-  <View style={[styles.kpiCard, { backgroundColor: colors.card }]}>
-    <Text style={{ fontSize: 28 }}>{icon}</Text>
+  <View
+    style={[
+      styles.kpiCard,
+      {
+        backgroundColor: colors.card,
+        width: 150,
+        minHeight: 180,
+        paddingVertical: 28,
+        paddingHorizontal: 20,
+      },
+    ]}
+  >
+    <Text style={{ fontSize: 41 }}>{icon}</Text>
     <Text style={[styles.kpiValue, { color }]}>{value}</Text>
     <Text style={[styles.kpiLabel, { color: colors.subText }]}>{label}</Text>
   </View>

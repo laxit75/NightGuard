@@ -8,15 +8,21 @@ const auth = require("../middleware/auth");
 const router = express.Router();
 
 // Get all guards (admin)
-router.put("/:id/block", auth, async (req, res) => {
+router.put("/:id/unblock", auth, async (req, res) => {
+  if (req.user.role !== "admin")
+    return res.status(403).json({ message: "Forbidden" });
   try {
-    const guard = await Guard.findByIdAndUpdate(
-      req.params.id,
-      {
-        isBlocked: true,
-      },
-      { new: true }
+    const guard = await Guard.findOneAndUpdate(
+      { id: req.params.id },
+      { isBlocked: false },
+      { new: true },
     );
+
+    if (!guard) {
+      return res.status(404).json({
+        message: "Guard not found",
+      });
+    }
 
     res.json(guard);
   } catch (err) {
@@ -25,15 +31,21 @@ router.put("/:id/block", auth, async (req, res) => {
     });
   }
 });
-router.put("/:id/unblock", auth, async (req, res) => {
+router.put("/:id/block", auth, async (req, res) => {
+  if (req.user.role !== "admin")
+    return res.status(403).json({ message: "Forbidden" });
   try {
-    const guard = await Guard.findByIdAndUpdate(
-      req.params.id,
-      {
-        isBlocked: false,
-      },
-      { new: true }
+    const guard = await Guard.findOneAndUpdate(
+      { id: req.params.id },
+      { isBlocked: true },
+      { new: true },
     );
+
+    if (!guard) {
+      return res.status(404).json({
+        message: "Guard not found",
+      });
+    }
 
     res.json(guard);
   } catch (err) {
@@ -71,57 +83,57 @@ router.post("/", auth, async (req, res) => {
     } = req.body;
     const config = await Config.findOne();
 
-const selectedGroup = config?.alertGroups?.find(
-  (g) => g._id?.toString() === alertGroupId
-);
-console.log("Incoming Group ID:", alertGroupId);
+    const selectedGroup = config?.alertGroups?.find(
+      (g) => g._id?.toString() === alertGroupId,
+    );
+    console.log("Incoming Group ID:", alertGroupId);
 
-console.log(
-  "Config Groups:",
-  config?.alertGroups?.map((g) => ({
-    id: g._id?.toString(),
-    name: g.name,
-    type: g.type,
-  }))
-);
+    console.log(
+      "Config Groups:",
+      config?.alertGroups?.map((g) => ({
+        id: g._id?.toString(),
+        name: g.name,
+        type: g.type,
+      })),
+    );
 
-console.log("Selected Group:", selectedGroup);
+    console.log("Selected Group:", selectedGroup);
     const existing = await Guard.findOne({ id });
     if (existing)
       return res.status(400).json({ message: "Guard ID already exists" });
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password || "1234", salt);
-let alertInterval = 1800;
-let alertGroupType = "FIXED";
+    let alertInterval = 1800;
+    let alertGroupType = "FIXED";
 
-if (selectedGroup) {
-  alertGroupType = selectedGroup.type;
+    if (selectedGroup) {
+      alertGroupType = selectedGroup.type;
 
-  if (selectedGroup.type === "FIXED") {
-    alertInterval = selectedGroup.fixedInterval;
-  }
-}
-   const guard = new Guard({
-  id,
-  name,
-  location,
-  mobile,
-  siteId,
-  zoneId,
-  shiftId,
-  alertGroupId,
+      if (selectedGroup.type === "FIXED") {
+        alertInterval = selectedGroup.fixedInterval;
+      }
+    }
+    const guard = new Guard({
+      id,
+      name,
+      location,
+      mobile,
+      siteId,
+      zoneId,
+      shiftId,
+      alertGroupId,
 
-  alertInterval,
-  alertGroupType,
+      alertInterval,
+      alertGroupType,
 
-  password: hashedPassword,
-});
-console.log({
-  guard: id,
-  alertGroupType,
-  alertInterval,
-});
+      password: hashedPassword,
+    });
+    console.log({
+      guard: id,
+      alertGroupType,
+      alertInterval,
+    });
     await guard.save();
     res.status(201).json(guard);
   } catch (err) {
@@ -135,10 +147,10 @@ router.put("/:id", auth, async (req, res) => {
     return res.status(403).json({ message: "Forbidden" });
   try {
     const guard = await Guard.findOneAndUpdate(
-  { id: req.params.id },
-  req.body,
-  { returnDocument: "after" },
-);
+      { id: req.params.id },
+      req.body,
+      { returnDocument: "after" },
+    );
     res.json(guard);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -194,13 +206,13 @@ router.post("/:id/shift/end", auth, async (req, res) => {
     guard.shiftStartTime = "";
     guard.shiftEndTime = "";
     guard.shiftStarted = false;
-guard.isActive = false;
-guard.shiftStartTime = "";
-guard.shiftEndTime = "";
+    guard.isActive = false;
+    guard.shiftStartTime = "";
+    guard.shiftEndTime = "";
 
-guard.totalAlerts = 0;
-guard.respondedAlerts = 0;
-guard.missedAlerts = 0;
+    guard.totalAlerts = 0;
+    guard.respondedAlerts = 0;
+    guard.missedAlerts = 0;
     await guard.save();
     res.json(guard);
   } catch (err) {
