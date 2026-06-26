@@ -55,7 +55,11 @@ export type EscalationLevelConfig = {
   _id: string;
   level: number;
   name: string;
+  designation: string;
   phone: string;
+  email: string;
   missedThreshold: number;
+  notifyBySMS: boolean;
+  notifyByCall: boolean;
 };
 export type GameType = "PONG" | "MATH" | "YESNO" | "SNAKE" | "TAPTARGET";

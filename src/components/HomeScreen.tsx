@@ -2861,90 +2861,474 @@ export default function HomeScreen() {
             {/* ══ ESCALATION ══ */}
             {adminPage === "escalation" && (
               <>
+                {/* ── LIVE ESCALATION ALERTS ── */}
                 <View
                   style={[
                     styles.card,
-                    { backgroundColor: colors.card, marginBottom: 20 },
+                    { backgroundColor: colors.card, marginBottom: 16 },
                   ]}
                 >
-                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                    🚨 Escalation Report
-                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                      🚨 Active Escalations
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor:
+                          escalationReport.length > 0
+                            ? colors.danger
+                            : colors.success,
+                        borderRadius: 12,
+                        paddingHorizontal: 10,
+                        paddingVertical: 3,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {escalationReport.length} Active
+                      </Text>
+                    </View>
+                  </View>
                   <Text
                     style={[
                       styles.guardDetail,
                       { color: colors.subText, marginBottom: 12 },
                     ]}
                   >
-                    Guards who have reached a missed-alert threshold
+                    Guards who have breached a missed-alert threshold
                   </Text>
                   {escalationReport.length === 0 ? (
-                    <Text style={{ color: colors.subText }}>
-                      No escalations right now.
-                    </Text>
-                  ) : (
-                    escalationReport.map(({ guard, level }) => (
-                      <View
-                        key={guard.id}
-                        style={[
-                          styles.alertItem,
-                          {
-                            backgroundColor: colors.bg,
-                            borderLeftColor: colors.danger,
-                          },
-                        ]}
+                    <View style={{ alignItems: "center", paddingVertical: 20 }}>
+                      <Text style={{ fontSize: 32, marginBottom: 8 }}>✅</Text>
+                      <Text
+                        style={{ color: colors.success, fontWeight: "600" }}
                       >
-                        <Text
-                          style={[
-                            styles.alertGuardName,
-                            { color: colors.text },
-                          ]}
-                        >
-                          {guard.name} ({guard.id})
-                        </Text>
-                        <Text
-                          style={[styles.alertTime, { color: colors.subText }]}
-                        >
-                          {guard.missedAlerts} missed alerts — Level{" "}
-                          {level.level}: {level.name}
-                        </Text>
-                        <Text
+                        All clear — no escalations
+                      </Text>
+                    </View>
+                  ) : (
+                    escalationReport.map(({ guard, level }) => {
+                      const compliance =
+                        guard.totalAlerts === 0
+                          ? 100
+                          : Math.round(
+                              (guard.respondedAlerts / guard.totalAlerts) * 100,
+                            );
+                      return (
+                        <View
+                          key={guard.id}
                           style={{
-                            color: colors.danger,
-                            fontWeight: "600",
-                            fontSize: 12,
+                            backgroundColor: colors.bg,
+                            borderRadius: 10,
+                            padding: 14,
+                            marginBottom: 10,
+                            borderLeftWidth: 4,
+                            borderLeftColor:
+                              level.level === 1
+                                ? colors.warning
+                                : level.level === 2
+                                  ? "#FF8C00"
+                                  : colors.danger,
                           }}
                         >
-                          📞 Notify: {level.phone}
-                        </Text>
-                      </View>
-                    ))
+                          {/* Header row */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 6,
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.alertGuardName,
+                                { color: colors.text },
+                              ]}
+                            >
+                              {guard.name}
+                            </Text>
+                            <View
+                              style={{
+                                backgroundColor:
+                                  level.level === 1
+                                    ? colors.warning
+                                    : level.level === 2
+                                      ? "#FF8C00"
+                                      : colors.danger,
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                LEVEL {level.level}
+                              </Text>
+                            </View>
+                          </View>
+                          {/* Guard info */}
+                          <Text
+                            style={{
+                              color: colors.subText,
+                              fontSize: 12,
+                              marginBottom: 4,
+                            }}
+                          >
+                            🪪 {guard.id} • 📍 {guard.location || "—"}
+                          </Text>
+                          {/* Stats row */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              gap: 12,
+                              marginBottom: 8,
+                            }}
+                          >
+                            <View style={{ alignItems: "center" }}>
+                              <Text
+                                style={{
+                                  color: colors.danger,
+                                  fontWeight: "700",
+                                  fontSize: 16,
+                                }}
+                              >
+                                {guard.missedAlerts}
+                              </Text>
+                              <Text
+                                style={{ color: colors.subText, fontSize: 10 }}
+                              >
+                                Missed
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: "center" }}>
+                              <Text
+                                style={{
+                                  color: colors.success,
+                                  fontWeight: "700",
+                                  fontSize: 16,
+                                }}
+                              >
+                                {guard.respondedAlerts}
+                              </Text>
+                              <Text
+                                style={{ color: colors.subText, fontSize: 10 }}
+                              >
+                                Responded
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: "center" }}>
+                              <Text
+                                style={{
+                                  color:
+                                    compliance >= 80
+                                      ? colors.success
+                                      : compliance >= 50
+                                        ? colors.warning
+                                        : colors.danger,
+                                  fontWeight: "700",
+                                  fontSize: 16,
+                                }}
+                              >
+                                {compliance}%
+                              </Text>
+                              <Text
+                                style={{ color: colors.subText, fontSize: 10 }}
+                              >
+                                Compliance
+                              </Text>
+                            </View>
+                          </View>
+                          {/* Escalation contact */}
+                          <View
+                            style={{
+                              backgroundColor: colors.card,
+                              borderRadius: 8,
+                              padding: 10,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: colors.text,
+                                fontWeight: "600",
+                                fontSize: 13,
+                                marginBottom: 4,
+                              }}
+                            >
+                              {level.name}{" "}
+                              {level.designation
+                                ? `— ${level.designation}`
+                                : ""}
+                            </Text>
+                            {!!level.phone && (
+                              <Text
+                                style={{ color: colors.primary, fontSize: 13 }}
+                              >
+                                📞 {level.phone}
+                              </Text>
+                            )}
+                            {!!level.email && (
+                              <Text
+                                style={{
+                                  color: colors.primary,
+                                  fontSize: 12,
+                                  marginTop: 2,
+                                }}
+                              >
+                                ✉️ {level.email}
+                              </Text>
+                            )}
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                gap: 8,
+                                marginTop: 6,
+                              }}
+                            >
+                              {level.notifyBySMS && (
+                                <View
+                                  style={{
+                                    backgroundColor: colors.badgePrimary,
+                                    borderRadius: 6,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: colors.badgePrimaryText,
+                                      fontSize: 11,
+                                    }}
+                                  >
+                                    SMS
+                                  </Text>
+                                </View>
+                              )}
+                              {level.notifyByCall && (
+                                <View
+                                  style={{
+                                    backgroundColor: colors.badgeSuccess,
+                                    borderRadius: 6,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: colors.badgeSuccessText,
+                                      fontSize: 11,
+                                    }}
+                                  >
+                                    CALL
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })
                   )}
                 </View>
 
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    { color: colors.text, marginBottom: 8 },
-                  ]}
+                {/* ── ESCALATION LEVEL SETTINGS ── */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
                 >
-                  Escalation Levels (Settings)
-                </Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    ⚙️ Escalation Levels
+                  </Text>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: colors.primary,
+                      borderRadius: 8,
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                    }}
+                    onPress={async () => {
+                      const nextLevel = escalationLevels.length + 1;
+                      try {
+                        const res = await api.post("/escalation", {
+                          level: nextLevel,
+                          name: `Level ${nextLevel} Contact`,
+                          designation: "",
+                          phone: "",
+                          email: "",
+                          missedThreshold: nextLevel * 2,
+                          notifyBySMS: true,
+                          notifyByCall: false,
+                        });
+                        setEscalationLevels((prev) => [...prev, res.data]);
+                      } catch (err) {
+                        Alert.alert("Error", "Could not add level");
+                      }
+                    }}
+                  >
+                    <Text
+                      style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}
+                    >
+                      + Add Level
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {escalationLevels.length === 0 && (
+                  <View
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: colors.card,
+                        alignItems: "center",
+                        paddingVertical: 24,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: colors.subText }}>
+                      No escalation levels configured yet.
+                    </Text>
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 12,
+                        marginTop: 4,
+                      }}
+                    >
+                      Tap "+ Add Level" to create one.
+                    </Text>
+                  </View>
+                )}
+
                 {escalationLevels.map((level) => (
                   <View
                     key={`${level._id}-${level.level}`}
                     style={[
                       styles.card,
-                      { backgroundColor: colors.card, marginBottom: 12 },
+                      { backgroundColor: colors.card, marginBottom: 14 },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.guardDetail,
-                        { color: colors.subText, marginBottom: 6 },
-                      ]}
+                    {/* Level header */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
                     >
-                      Level {level.level}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 16,
+                            backgroundColor:
+                              level.level === 1
+                                ? colors.warning
+                                : level.level === 2
+                                  ? "#FF8C00"
+                                  : colors.danger,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "#fff",
+                              fontWeight: "700",
+                              fontSize: 14,
+                            }}
+                          >
+                            {level.level}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            color: colors.text,
+                            fontWeight: "700",
+                            fontSize: 15,
+                          }}
+                        >
+                          Level {level.level}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          const confirmed =
+                            Platform.OS === "web"
+                              ? window.confirm(`Delete Level ${level.level}?`)
+                              : await new Promise((resolve) => {
+                                  Alert.alert(
+                                    "Delete Level",
+                                    `Delete Level ${level.level}?`,
+                                    [
+                                      {
+                                        text: "Cancel",
+                                        style: "cancel",
+                                        onPress: () => resolve(false),
+                                      },
+                                      {
+                                        text: "Delete",
+                                        style: "destructive",
+                                        onPress: () => resolve(true),
+                                      },
+                                    ],
+                                  );
+                                });
+                          if (!confirmed) return;
+                          try {
+                            await api.delete(`/escalation/${level._id}`);
+                            setEscalationLevels((prev) =>
+                              prev.filter((l) => l._id !== level._id),
+                            );
+                          } catch (err) {
+                            Alert.alert("Error", "Could not delete level");
+                          }
+                        }}
+                        style={{ padding: 4 }}
+                      >
+                        <Text style={{ color: colors.danger, fontSize: 18 }}>
+                          🗑️
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Contact Name */}
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 11,
+                        marginBottom: 3,
+                      }}
+                    >
+                      CONTACT NAME
                     </Text>
                     <TextInput
                       style={[
@@ -2956,23 +3340,95 @@ export default function HomeScreen() {
                         },
                       ]}
                       value={level.name}
+                      placeholder="e.g. Supervisor"
                       onChangeText={(txt) =>
                         updateEscalation(level._id, "name", txt)
                       }
                       placeholderTextColor={colors.subText}
                     />
+
+                    {/* Designation */}
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 11,
+                        marginBottom: 3,
+                      }}
+                    >
+                      DESIGNATION
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        { backgroundColor: colors.inputBg, color: colors.text },
+                      ]}
+                      value={level.designation || ""}
+                      placeholder="e.g. Site Manager"
+                      onChangeText={(txt) =>
+                        updateEscalation(level._id, "designation", txt)
+                      }
+                      placeholderTextColor={colors.subText}
+                    />
+
+                    {/* Phone */}
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 11,
+                        marginBottom: 3,
+                      }}
+                    >
+                      PHONE NUMBER
+                    </Text>
                     <TextInput
                       style={[
                         styles.input,
                         { backgroundColor: colors.inputBg, color: colors.text },
                       ]}
                       value={level.phone}
+                      placeholder="+91 99999 00000"
                       onChangeText={(txt) =>
                         updateEscalation(level._id, "phone", txt)
                       }
                       keyboardType="phone-pad"
                       placeholderTextColor={colors.subText}
                     />
+
+                    {/* Email */}
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 11,
+                        marginBottom: 3,
+                      }}
+                    >
+                      EMAIL
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        { backgroundColor: colors.inputBg, color: colors.text },
+                      ]}
+                      value={level.email || ""}
+                      placeholder="supervisor@company.com"
+                      onChangeText={(txt) =>
+                        updateEscalation(level._id, "email", txt)
+                      }
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      placeholderTextColor={colors.subText}
+                    />
+
+                    {/* Missed Threshold */}
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 11,
+                        marginBottom: 3,
+                      }}
+                    >
+                      TRIGGER AFTER (MISSED ALERTS)
+                    </Text>
                     <TextInput
                       style={[
                         styles.input,
@@ -2988,8 +3444,81 @@ export default function HomeScreen() {
                       }
                       keyboardType="numeric"
                       placeholderTextColor={colors.subText}
-                      placeholder={t("threshold")}
+                      placeholder="e.g. 3"
                     />
+
+                    {/* Notify toggles */}
+                    <Text
+                      style={{
+                        color: colors.subText,
+                        fontSize: 11,
+                        marginBottom: 8,
+                      }}
+                    >
+                      NOTIFY VIA
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          backgroundColor: level.notifyBySMS
+                            ? colors.primary
+                            : colors.inputBg,
+                          borderRadius: 8,
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                        }}
+                        onPress={() =>
+                          updateEscalation(
+                            level._id,
+                            "notifyBySMS",
+                            !level.notifyBySMS,
+                          )
+                        }
+                      >
+                        <Text style={{ fontSize: 16 }}>📱</Text>
+                        <Text
+                          style={{
+                            color: level.notifyBySMS ? "#fff" : colors.text,
+                            fontWeight: "600",
+                          }}
+                        >
+                          SMS
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          backgroundColor: level.notifyByCall
+                            ? colors.primary
+                            : colors.inputBg,
+                          borderRadius: 8,
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                        }}
+                        onPress={() =>
+                          updateEscalation(
+                            level._id,
+                            "notifyByCall",
+                            !level.notifyByCall,
+                          )
+                        }
+                      >
+                        <Text style={{ fontSize: 16 }}>📞</Text>
+                        <Text
+                          style={{
+                            color: level.notifyByCall ? "#fff" : colors.text,
+                            fontWeight: "600",
+                          }}
+                        >
+                          Call
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))}
               </>
