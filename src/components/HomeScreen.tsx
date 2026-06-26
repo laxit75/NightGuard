@@ -445,9 +445,17 @@ export default function HomeScreen() {
     } catch (err: any) {
       console.log("LOGIN ERROR:", err);
 
+      const isNetworkError =
+        !err?.response ||
+        err?.code === "ERR_NETWORK" ||
+        err?.code === "ECONNABORTED" ||
+        err?.message?.toLowerCase().includes("network");
+
       Alert.alert(
-        "Login Failed",
-        err?.response?.data?.message || "Unable to login",
+        isNetworkError ? "No Internet" : "Login Failed",
+        isNetworkError
+          ? "Please connect to Internet"
+          : err?.response?.data?.message || "Unable to login",
       );
     }
   };
