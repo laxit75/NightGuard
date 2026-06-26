@@ -170,14 +170,30 @@ export default function HomeScreen() {
     currentGameTypeRef.current = currentGameType;
   }, [currentGameType]);
 
-  const chartHeights = useMemo(
-    () => ({
-      daily: Math.floor(Math.random() * 60) + 20,
-      weekly: Math.floor(Math.random() * 60) + 20,
-      monthly: Math.floor(Math.random() * 60) + 20,
-    }),
-    [],
-  );
+  const chartData = useMemo(() => {
+    const now = Date.now();
+    const DAY = 86400000;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const daily = alertHistory.filter(
+      (a) => a.timestamp >= todayStart.getTime(),
+    );
+    const weekly = alertHistory.filter((a) => a.timestamp >= now - 7 * DAY);
+    const monthly = alertHistory.filter((a) => a.timestamp >= now - 30 * DAY);
+
+    const compute = (arr: typeof alertHistory) => ({
+      total: arr.length,
+      responded: arr.filter((a) => a.status === "Responded").length,
+      missed: arr.filter((a) => a.status === "Missed").length,
+    });
+
+    return {
+      daily: compute(daily),
+      weekly: compute(weekly),
+      monthly: compute(monthly),
+    };
+  }, [alertHistory]);
 
   // ═══════════════════ FETCH DATA FROM API ═══════════════════
   useEffect(() => {
@@ -1545,53 +1561,181 @@ export default function HomeScreen() {
                   <Text style={[styles.sectionTitle, { color: colors.text }]}>
                     Alert Trends
                   </Text>
+                  {/* Legend */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      gap: 16,
+                      marginBottom: 12,
+                      marginLeft: 4,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 2,
+                          backgroundColor: colors.success,
+                        }}
+                      />
+                      <Text style={{ color: colors.subText, fontSize: 11 }}>
+                        Responded
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 2,
+                          backgroundColor: colors.danger,
+                        }}
+                      />
+                      <Text style={{ color: colors.subText, fontSize: 11 }}>
+                        Missed
+                      </Text>
+                    </View>
+                  </View>
                   <View
                     style={{
                       flexDirection: "row",
                       justifyContent: "space-around",
-                      marginBottom: 20,
+                      alignItems: "flex-end",
+                      marginBottom: 8,
+                      height: 110,
                     }}
                   >
-                    {(["Daily", "Weekly", "Monthly"] as const).map(
-                      (period, i) => {
-                        const h = [
-                          chartHeights.daily,
-                          chartHeights.weekly,
-                          chartHeights.monthly,
-                        ][i];
-                        return (
-                          <View key={period} style={{ alignItems: "center" }}>
-                            <View
-                              style={{
-                                height: 80,
-                                width: 40,
-                                backgroundColor: colors.inputBg,
-                                borderRadius: 8,
-                                justifyContent: "flex-end",
-                                overflow: "hidden",
-                              }}
-                            >
+                    {(["daily", "weekly", "monthly"] as const).map((period) => {
+                      const d = chartData[period];
+                      const maxVal = Math.max(d.total, 1);
+                      const BAR_MAX = 90;
+                      const respondedH = Math.max(
+                        4,
+                        Math.round((d.responded / maxVal) * BAR_MAX),
+                      );
+                      const missedH = Math.max(
+                        d.missed > 0 ? 4 : 0,
+                        Math.round((d.missed / maxVal) * BAR_MAX),
+                      );
+                      const label =
+                        period === "daily"
+                          ? "Today"
+                          : period === "weekly"
+                            ? "7 Days"
+                            : "30 Days";
+                      return (
+                        <View
+                          key={period}
+                          style={{ alignItems: "center", gap: 4 }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.subText,
+                              fontSize: 11,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {d.total}
+                          </Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "flex-end",
+                              gap: 3,
+                            }}
+                          >
+                            <View style={{ alignItems: "center" }}>
                               <View
                                 style={{
-                                  height: h,
-                                  backgroundColor: colors.primary,
-                                  borderRadius: 8,
+                                  width: 22,
+                                  height: respondedH,
+                                  backgroundColor: colors.success,
+                                  borderRadius: 4,
                                 }}
                               />
                             </View>
-                            <Text
-                              style={{
-                                color: colors.subText,
-                                fontSize: 10,
-                                marginTop: 4,
-                              }}
-                            >
-                              {period}
-                            </Text>
+                            <View style={{ alignItems: "center" }}>
+                              <View
+                                style={{
+                                  width: 22,
+                                  height: missedH,
+                                  backgroundColor: colors.danger,
+                                  borderRadius: 4,
+                                }}
+                              />
+                            </View>
                           </View>
-                        );
-                      },
-                    )}
+                          <Text
+                            style={{
+                              color: colors.subText,
+                              fontSize: 10,
+                              marginTop: 2,
+                            }}
+                          >
+                            {label}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                  {/* Compliance rate row */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-around",
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border,
+                      paddingTop: 10,
+                      marginTop: 4,
+                    }}
+                  >
+                    {(["daily", "weekly", "monthly"] as const).map((period) => {
+                      const d = chartData[period];
+                      const rate =
+                        d.total === 0
+                          ? 100
+                          : Math.round((d.responded / d.total) * 100);
+                      const label =
+                        period === "daily"
+                          ? "Today"
+                          : period === "weekly"
+                            ? "7 Days"
+                            : "30 Days";
+                      return (
+                        <View key={period} style={{ alignItems: "center" }}>
+                          <Text
+                            style={{
+                              color:
+                                rate >= 80
+                                  ? colors.success
+                                  : rate >= 50
+                                    ? colors.warning
+                                    : colors.danger,
+                              fontSize: 13,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {rate}%
+                          </Text>
+                          <Text style={{ color: colors.subText, fontSize: 10 }}>
+                            {label}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
                 <View style={[styles.card, { backgroundColor: colors.card }]}>
