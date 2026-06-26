@@ -689,7 +689,8 @@ export default function HomeScreen() {
         name: createSiteName.trim(),
       });
 
-      setSites((prev) => [...prev, res.data]);
+      const newSite = { id: res.data._id, name: res.data.name, zones: [] };
+      setSites((prev) => [...prev, newSite]);
 
       setCreateSiteName("");
       setShowCreateSite(false);
