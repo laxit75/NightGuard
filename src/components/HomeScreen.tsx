@@ -423,6 +423,8 @@ export default function HomeScreen() {
 
       if (res.data.role === "admin") {
         setAdminPage("dashboard");
+        setSidebarVisible(false);
+        sidebarAnim.setValue(-280);
       }
 
       if (res.data.role === "guard") {
@@ -467,6 +469,9 @@ export default function HomeScreen() {
     setShowAlert(false);
     setTimerSeconds(30);
     setResponseSeconds(30);
+    setAdminPage("dashboard");
+    setSidebarVisible(false);
+    sidebarAnim.setValue(-280);
   };
 
   // ── Shift ──
