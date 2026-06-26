@@ -97,7 +97,7 @@ export default function HomeScreen() {
 
   // ── Admin UI ──
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const sidebarAnim = useRef(new Animated.Value(-280)).current;
+  const sidebarAnim = useRef(new Animated.Value(-240)).current;
   const [adminPage, setAdminPage] = useState<
     | "dashboard"
     | "users"
@@ -424,7 +424,7 @@ export default function HomeScreen() {
       if (res.data.role === "admin") {
         setAdminPage("dashboard");
         setSidebarVisible(false);
-        sidebarAnim.setValue(-280);
+        sidebarAnim.setValue(-240);
       }
 
       if (res.data.role === "guard") {
@@ -471,7 +471,7 @@ export default function HomeScreen() {
     setResponseSeconds(30);
     setAdminPage("dashboard");
     setSidebarVisible(false);
-    sidebarAnim.setValue(-280);
+    sidebarAnim.setValue(-240);
   };
 
   // ── Shift ──
@@ -1022,7 +1022,7 @@ export default function HomeScreen() {
   const toggleSidebar = () => {
     if (sidebarVisible) {
       Animated.timing(sidebarAnim, {
-        toValue: -280,
+        toValue: -240,
         duration: 300,
         useNativeDriver: Platform.OS !== "web", // ✅
       }).start(() => setSidebarVisible(false));
@@ -1185,11 +1185,12 @@ export default function HomeScreen() {
         <Text
           style={{
             color: colors.sidebarText,
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: "bold",
           }}
+          numberOfLines={1}
         >
-          Night Guard
+          🌙 Night Guard
         </Text>
         <Text
           style={{
