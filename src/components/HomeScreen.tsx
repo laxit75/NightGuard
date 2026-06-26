@@ -37,7 +37,7 @@ import {
   getRandomGame,
 } from "./Games";
 import { styles } from "./Styles";
-import { KPICard, LanguageToggle, TableHeader } from "./SubComponents";
+import { KPICard, LanguageToggle, TableHeader, ReportRow, StatPill } from "./SubComponents";
 import { useTheme } from "./ThemeContext";
 
 export default function HomeScreen() {
@@ -2145,45 +2145,16 @@ export default function HomeScreen() {
                   <Text style={[styles.sectionTitle, { color: colors.text }]}>
                     Recent Activity
                   </Text>
-                  {alertHistory.slice(0, 5).map((item) => (
-                    <View
-                      key={`${item.id}-${item.timestamp}`}
-                      style={[
-                        styles.alertItem,
-                        {
-                          backgroundColor: colors.bg,
-                          borderLeftColor:
-                            item.status === "Responded"
-                              ? colors.success
-                              : colors.danger,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.alertGuardName, { color: colors.text }]}
-                      >
-                        {item.guardName}
-                      </Text>
-                      <Text
-                        style={[styles.alertTime, { color: colors.subText }]}
-                      >
-                        {item.date} at {item.time} – {item.alertType}
-                      </Text>
-                      <Text
-                        style={{
-                          color:
-                            item.status === "Responded"
-                              ? colors.success
-                              : colors.danger,
-                          fontWeight: "600",
-                          fontSize: 12,
-                        }}
-                      >
-                        {item.status}
-                        {item.responseTime ? ` in ${item.responseTime}s` : ""}
-                      </Text>
-                    </View>
-                  ))}
+                  <View>
+                    {alertHistory.slice(0, 5).map((item) => (
+                      <ReportRow
+                        key={`${item.id}-${item.timestamp}`}
+                        item={item}
+                        onPress={(it) => setSelectedReportAlert(it)}
+                        colors={colors}
+                      />
+                    ))}
+                  </View>
                 </View>
               </>
             )}
