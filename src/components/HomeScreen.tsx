@@ -41,7 +41,7 @@ import {
   KPICard,
   LanguageToggle,
   ReportRow,
-  TableHeader
+  TableHeader,
 } from "./SubComponents";
 import { useTheme } from "./ThemeContext";
 
@@ -1231,7 +1231,7 @@ export default function HomeScreen() {
   );
 
   const handleExportReport = () => {
-    if (Platform.OS === "web") {
+    (async () => {
       const csvRows = [
         ["Date", "Time", "Guard", "Status", "Site", "Zone", "Response Time"],
         ...reportFilteredAlerts.map((item) => [
@@ -1245,19 +1245,108 @@ export default function HomeScreen() {
         ]),
       ];
       const csvContent = csvRows.map((row) => row.join(",")).join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "alert_report.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-    Alert.alert(
-      "Export",
-      "CSV export is available on web. Use the backend export endpoint for native apps.",
-    );
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "alert_report.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      try {
+        // Use require at runtime; gracefully handle missing packages
+        let FileSystem: any = null;
+        let Sharing: any = null;
+        let RNShare: any = null;
+
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          FileSystem = require("expo-file-system");
+        } catch (e) {
+          FileSystem = null;
+        }
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          Sharing = require("expo-sharing");
+        } catch (e) {
+          Sharing = null;
+        }
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          RNShare = require("react-native");
+        } catch (e) {
+          RNShare = null;
+        }
+
+        const filename = `alert_report_${Date.now()}.csv`;
+
+        if (FileSystem && FileSystem.cacheDirectory) {
+          const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+          await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+
+          // Try expo-sharing first
+          if (Sharing && typeof Sharing.isAvailableAsync === "function") {
+            const available = await Sharing.isAvailableAsync();
+            if (available && typeof Sharing.shareAsync === "function") {
+              await Sharing.shareAsync(fileUri, {
+                mimeType: "text/csv",
+                dialogTitle: "Export CSV",
+              });
+              return;
+            }
+          }
+
+          // Fallback: use React Native Share to share text
+          if (RNShare && RNShare.Share) {
+            try {
+              await RNShare.Share.share({
+                title: filename,
+                message: csvContent,
+              });
+              return;
+            } catch (innerErr) {
+              console.warn("Share fallback failed", innerErr);
+            }
+          }
+
+          Alert.alert(
+            "Export",
+            "CSV saved to cache but sharing is not available on this device.",
+          );
+          return;
+        }
+
+        // If FileSystem not available, fallback to copying CSV to clipboard or show message
+        if (RNShare && RNShare.Share) {
+          try {
+            await RNShare.Share.share({
+              title: filename,
+              message: csvContent,
+            });
+            return;
+          } catch (innerErr) {
+            console.warn("Share fallback failed", innerErr);
+          }
+        }
+
+        Alert.alert(
+          "Export Failed",
+          "Cannot write files on this device. Install expo-file-system or use web export.",
+        );
+      } catch (err) {
+        console.error("Export error", err);
+        Alert.alert("Export Failed", "Unexpected error while exporting CSV.");
+      }
+    })();
   };
 
   const renderReportDetailModal = () => (
